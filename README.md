@@ -9,6 +9,14 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 - Backend: `0.22.14`
 - Frontend: `0.32.77`
 
+## Docker image
+
+The current image is published automatically to GitHub Container Registry:
+
+```text
+ghcr.io/isanto1306/disk-monitor:latest
+```
+
 ## Features
 
 - Physical disk discovery for HDD, SSD, NVMe and supported USB storage
@@ -74,10 +82,10 @@ Edit `.env` and set your own values. Generate a session secret, for example:
 python3 -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-Then:
+Then pull and start the published image:
 
 ```bash
-docker compose build --no-cache
+docker compose pull
 docker compose up -d
 ```
 
@@ -91,12 +99,19 @@ http://<ZIMAOS-HOST>:8999
 
 ```bash
 git pull
-docker compose down
-docker compose build --no-cache
+docker compose pull
 docker compose up -d
 ```
 
 The local `./cache` directory remains persistent and is excluded from Git.
+
+## Build from source
+
+The repository still contains the `Dockerfile` and source files used by GitHub Actions. To build locally instead of using GHCR:
+
+```bash
+docker build -t disk-monitor-local .
+```
 
 ## Important standby rule
 
