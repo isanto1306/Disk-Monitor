@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+cache/*
+!cache/.gitkeep
+__pycache__/
+*.py[cod]
+*.log
+*.tar
+*.tar.gz
+*.zip
