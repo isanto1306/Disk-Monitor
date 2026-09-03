@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 import main
 
 
-main.app.version = "0.22.24"
+main.app.version = "0.22.25"
 app = main.app
 
 FIRST_START_SMART_CHECK_FILE = Path(
@@ -294,6 +294,8 @@ ROOT_HTML_RUNTIME_PATCH = r"""
         250
     );
 
+    let lastAppliedSmartCheckState = null;
+
     const syncSmartFullCheckStatus = async () => {
         if (document.hidden) {
             return;
@@ -313,12 +315,28 @@ ROOT_HTML_RUNTIME_PATCH = r"""
 
             if (
                 typeof window.applySmartFullCheckState
-                === "function"
+                !== "function"
             ) {
-                window.applySmartFullCheckState(
-                    checkState
-                );
+                return;
             }
+
+            const checkStateSignature = JSON.stringify(
+                checkState
+            );
+
+            if (
+                checkStateSignature
+                === lastAppliedSmartCheckState
+            ) {
+                return;
+            }
+
+            lastAppliedSmartCheckState =
+                checkStateSignature;
+
+            window.applySmartFullCheckState(
+                checkState
+            );
         }
         catch (_) {
             // A container restart can make the API temporarily unavailable.
