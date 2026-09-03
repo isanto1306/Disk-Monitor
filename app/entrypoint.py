@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,7 +10,7 @@ import main
 
 # Runtime backend version for this image. The main module remains the core
 # implementation; this entrypoint adds installation-specific startup policy.
-main.app.version = "0.22.16"
+main.app.version = "0.22.17"
 app = main.app
 
 
@@ -32,12 +33,105 @@ except Exception:
 _original_startup_smart_check = main.run_startup_smart_check
 
 
+def can_refresh_filesystem_usage_after_explicit_wake(
+    disks
+):
+    """Allow capacity refresh while an HDD is explicitly held awake.
+
+    Normal monitoring keeps the original no-wake behavior. The extra path is
+    only active for HDDs that a manual/first-run SMART action has deliberately
+    marked awake through main.manual_awake_until.
+    """
+
+    if not disks:
+        return False
+
+    for disk in disks:
+        disk_type = (
+            disk.get("type")
+            or "UNKNOWN"
+        )
+
+        if disk_type not in (
+            "HDD",
+            "UNKNOWN"
+        ):
+            continue
+
+        device = disk.get("device")
+        awake_until = (
+            main.manual_awake_until.get(
+                device,
+                0
+            )
+            if device
+            else 0
+        )
+
+        if time.time() < awake_until:
+            continue
+
+        activity = (
+            disk.get("activity")
+            or {}
+        )
+
+        if activity.get("status") == "ACTIVE":
+            continue
+
+        if disk.get("current_access"):
+            continue
+
+        return False
+
+    return True
+
+
+# Keep the normal no-wake capacity policy, but recognize the explicit awake
+# hold that already exists for manual/full SMART actions.
+main.can_refresh_filesystem_usage_without_wake = (
+    can_refresh_filesystem_usage_after_explicit_wake
+)
+
+
+async def seed_first_run_storage_usage():
+    """Populate used/total capacity while first-run disks are already awake."""
+
+    disk_list = await asyncio.to_thread(
+        main.get_disks
+    )
+
+    # The full SMART worker deliberately woke HDDs. Refresh the explicit awake
+    # hold so statvfs can seed the capacity cache immediately after the check.
+    now = time.time()
+
+    for disk in disk_list:
+        if (
+            (disk.get("type") or "UNKNOWN")
+            in ("HDD", "UNKNOWN")
+        ):
+            device = disk.get("device")
+            if device:
+                main.manual_awake_until[
+                    device
+                ] = now + 120
+
+    return await asyncio.to_thread(
+        main.get_storage_usage_summary,
+        disk_list
+    )
+
+
 async def run_startup_smart_check_with_first_install():
     """Run one full SMART check on a fresh installation.
 
     The first installation check intentionally uses the same full-check state
     machinery as the manual SMART CHECK. This means the header status and the
     per-drive result list are populated automatically after the first run.
+
+    While those drives are deliberately awake, Disk Monitor also seeds the
+    filesystem usage cache so "used" capacity is available immediately in the
+    summary and individual drive cards.
 
     Sleeping HDDs may be woken for this one-time initialization. Ordinary
     application restarts continue to use the original no-wake startup policy.
@@ -116,6 +210,21 @@ async def run_startup_smart_check_with_first_install():
                 }
             )
 
+    storage_usage_seeded = False
+
+    try:
+        storage_usage = (
+            await seed_first_run_storage_usage()
+        )
+        storage_usage_seeded = bool(
+            isinstance(storage_usage, dict)
+            and storage_usage.get("available")
+        )
+    except Exception:
+        # SMART initialization has already succeeded. A capacity-read failure
+        # must not prevent the application from starting.
+        storage_usage_seeded = False
+
     try:
         FIRST_START_SMART_CHECK_FILE.parent.mkdir(
             parents=True,
@@ -134,7 +243,9 @@ async def run_startup_smart_check_with_first_install():
                     "attempted": attempted,
                     "succeeded": succeeded,
                     "failed": failed,
-                    "full_check_state": True
+                    "full_check_state": True,
+                    "storage_usage_seeded":
+                        storage_usage_seeded
                 },
                 ensure_ascii=False,
                 indent=2

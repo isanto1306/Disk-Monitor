@@ -6,7 +6,7 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 
 ## Current development versions
 
-- Backend: `0.22.16`
+- Backend: `0.22.17`
 - Frontend: `0.32.77`
 
 ## Docker image
@@ -108,6 +108,7 @@ This first check is intentionally different from normal monitoring:
 - SATA/SAS HDDs, supported USB HDDs, SSDs and NVMe drives are included when detected and supported by the controller/bridge.
 - The check is attempted once for every detected physical drive.
 - The same persistent result state used by the manual **SMART CHECK** is written automatically, so the header status and per-drive results reflect the first-run check.
+- While the drives are deliberately awake, Disk Monitor also reads and caches filesystem usage so the **used capacity** is available in the summary and individual drive cards immediately after the first-run check.
 - A persistent marker is stored in the Disk Monitor cache after the initial pass, so ordinary container restarts do **not** wake all HDDs again.
 - If a controller or USB bridge does not support SMART correctly, the check for that device can fail even though the drive itself is otherwise usable.
 
