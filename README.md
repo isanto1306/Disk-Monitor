@@ -27,6 +27,7 @@ ghcr.io/isanto1306/disk-monitor:latest
 - Manual SMART refresh and full SMART check
 - Automatic SMART refresh: Off, 1×, 2× or 3× daily
 - Automatic SMART checks avoid waking sleeping HDDs
+- Startup SMART check without intentionally waking sleeping HDDs
 - RAID detection, RAID member overview and SMART integration
 - RAID standby controls with safety checks
 - ZimaOS standby-timer integration where available
@@ -95,6 +96,31 @@ Open:
 http://<ZIMAOS-HOST>:8999
 ```
 
+## First start / important setup
+
+### Startup SMART check
+
+When Disk Monitor starts, it automatically performs one startup SMART refresh for drives that can be checked safely without intentionally waking a sleeping mechanical HDD.
+
+- SSD/flash storage and confirmed-awake HDDs can be refreshed at startup.
+- A sleeping mechanical HDD is left asleep.
+- Manual SMART actions remain separate and may intentionally wake a drive.
+
+This gives Disk Monitor an initial SMART data set as soon as safely possible after startup.
+
+### USB HDD standby time
+
+USB enclosures and USB-to-SATA bridges often do not expose their real standby timer or power state reliably. If you use a mechanical USB HDD, first determine approximately how long that drive/enclosure takes to enter standby after the last disk activity.
+
+Then enter the same value in Disk Monitor under the USB auto-standby setting for that drive.
+
+Important:
+
+- This value is used only for passive standby estimation inside Disk Monitor.
+- Disk Monitor does **not** change the USB enclosure's real standby timer with this setting.
+- Disk Monitor does not intentionally wake a sleeping USB HDD just to verify the estimate.
+- If the configured time does not match the enclosure's actual behavior, the displayed estimated standby state may be inaccurate.
+
 ## Update during development
 
 ```bash
@@ -118,6 +144,8 @@ docker build -t disk-monitor-local .
 Normal monitoring must not wake a sleeping mechanical HDD merely to collect monitoring or SMART data. Explicit manual actions are the exception.
 
 USB bridge behavior varies significantly by enclosure/controller. A state reported as estimated standby is not always equivalent to a directly queryable SATA/SAS standby state.
+
+For mechanical USB HDDs, configure Disk Monitor's expected USB auto-standby time to match the enclosure's observed idle-to-standby delay. This setting is only used for passive estimation and does not program the enclosure itself.
 
 ## License
 
