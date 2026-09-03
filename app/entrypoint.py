@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 import main
 
 
-main.app.version = "0.22.27"
+main.app.version = "0.22.28"
 app = main.app
 
 FIRST_START_SMART_CHECK_FILE = Path(
@@ -31,6 +31,8 @@ _original_update_process_access = main.update_process_access
 
 # Runtime-only frontend additions:
 # - keep first-run SMART status live without F5;
+# - compensate only the disk grid by half of the real browser scrollbar width,
+#   without reserving a permanent scrollbar gutter;
 # - once the closed-card height has settled after the first render, keep that
 #   exact height for the rest of the current layout session. SMART/USB/power
 #   state changes must not make the grid move. A deliberate layout switch or
@@ -51,6 +53,11 @@ ROOT_HTML_RUNTIME_PATCH = r"""
     let resizeTimer = null;
     let observedGrid = null;
     let gridStyleObserver = null;
+    let scrollbarObservedGrid = null;
+    let scrollbarGridResizeObserver = null;
+    let scrollbarViewportResizeObserver = null;
+    let scrollbarCompensationFrame = null;
+    let lastScrollbarCompensation = null;
 
     const getDiskGrid = () => (
         document.getElementById("diskGrid")
@@ -71,6 +78,107 @@ ROOT_HTML_RUNTIME_PATCH = r"""
         return firstCard
             ? firstCard.classList.contains("compact")
             : null;
+    };
+
+    const syncScrollbarCenterCompensation = () => {
+        const grid = getDiskGrid();
+        if (!grid) {
+            return;
+        }
+
+        const scrollbarWidth = Math.max(
+            0,
+            window.innerWidth
+            - document.documentElement.clientWidth
+        );
+
+        const compensation = (
+            scrollbarWidth > 0
+                ? scrollbarWidth / 2
+                : 0
+        );
+
+        if (
+            lastScrollbarCompensation !== null
+            && Math.abs(
+                compensation
+                - lastScrollbarCompensation
+            ) < 0.01
+        ) {
+            return;
+        }
+
+        lastScrollbarCompensation = compensation;
+
+        if (compensation > 0) {
+            grid.style.transform = (
+                "translateX("
+                + compensation
+                + "px)"
+            );
+        }
+        else {
+            grid.style.removeProperty(
+                "transform"
+            );
+        }
+    };
+
+    const scheduleScrollbarCenterCompensation = () => {
+        if (scrollbarCompensationFrame !== null) {
+            return;
+        }
+
+        scrollbarCompensationFrame = (
+            window.requestAnimationFrame(
+                () => {
+                    scrollbarCompensationFrame = null;
+                    syncScrollbarCenterCompensation();
+                }
+            )
+        );
+    };
+
+    const ensureScrollbarCompensationObservers = () => {
+        const grid = getDiskGrid();
+
+        if (
+            typeof ResizeObserver === "function"
+            && !scrollbarViewportResizeObserver
+        ) {
+            scrollbarViewportResizeObserver = (
+                new ResizeObserver(
+                    scheduleScrollbarCenterCompensation
+                )
+            );
+
+            scrollbarViewportResizeObserver.observe(
+                document.documentElement
+            );
+        }
+
+        if (
+            !grid
+            || grid === scrollbarObservedGrid
+            || typeof ResizeObserver !== "function"
+        ) {
+            return;
+        }
+
+        if (scrollbarGridResizeObserver) {
+            scrollbarGridResizeObserver.disconnect();
+        }
+
+        scrollbarObservedGrid = grid;
+        scrollbarGridResizeObserver = (
+            new ResizeObserver(
+                scheduleScrollbarCenterCompensation
+            )
+        );
+
+        scrollbarGridResizeObserver.observe(
+            grid
+        );
     };
 
     const readEqualHeight = grid => {
@@ -143,6 +251,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
 
     const captureBaseline = () => {
         ensureGridStyleObserver();
+        ensureScrollbarCompensationObservers();
 
         const grid = getDiskGrid();
         const cards = getClosedCards(grid);
@@ -175,6 +284,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
         applyLockedHeight(
             grid
         );
+        scheduleScrollbarCenterCompensation();
     };
 
     const scheduleBaselineCapture = () => {
@@ -224,6 +334,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
                 applyLockedHeight(
                     grid
                 );
+                scheduleScrollbarCenterCompensation();
                 return;
             }
 
@@ -232,11 +343,13 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             );
 
             scheduleBaselineCapture();
+            scheduleScrollbarCenterCompensation();
         };
     }
 
     const maintainLockedHeight = () => {
         ensureGridStyleObserver();
+        ensureScrollbarCompensationObservers();
 
         const grid = getDiskGrid();
         if (!grid) {
@@ -254,6 +367,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             && compactMode !== lockedCompactMode
         ) {
             resetBaseline();
+            scheduleScrollbarCenterCompensation();
             return;
         }
 
@@ -261,12 +375,15 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             applyLockedHeight(
                 grid
             );
+            scheduleScrollbarCenterCompensation();
             return;
         }
 
         if (getClosedCards(grid).length) {
             scheduleBaselineCapture();
         }
+
+        scheduleScrollbarCenterCompensation();
     };
 
     window.addEventListener(
@@ -282,6 +399,8 @@ ROOT_HTML_RUNTIME_PATCH = r"""
                 () => {
                     resizeTimer = null;
                     resetBaseline();
+                    lastScrollbarCompensation = null;
+                    scheduleScrollbarCenterCompensation();
                 },
                 250
             );
@@ -289,6 +408,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
     );
 
     maintainLockedHeight();
+    scheduleScrollbarCenterCompensation();
     window.setInterval(
         maintainLockedHeight,
         250
