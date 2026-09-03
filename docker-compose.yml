@@ -3,9 +3,7 @@ name: disk-monitor
 services:
   disk-monitor:
     container_name: disk-monitor
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/isanto1306/disk-monitor:latest
     restart: unless-stopped
     init: true
 
