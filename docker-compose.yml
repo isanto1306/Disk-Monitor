@@ -1,0 +1,44 @@
+services:
+  disk-monitor:
+    container_name: disk-monitor
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+
+    # Required so Disk Monitor can reach the ZimaOS local-storage service
+    # on 127.0.0.1 and expose the dashboard on the host at port 8999.
+    network_mode: host
+
+    # Required by the current hardware-integration design for SMART and
+    # explicit standby commands. This grants the container extensive host
+    # privileges. Run only trusted source code and do not expose the service
+    # directly to the public Internet.
+    privileged: true
+
+    environment:
+      DISK_MONITOR_USERNAME: "${DISK_MONITOR_USERNAME:?Set DISK_MONITOR_USERNAME in .env}"
+      DISK_MONITOR_PASSWORD: "${DISK_MONITOR_PASSWORD:?Set DISK_MONITOR_PASSWORD in .env}"
+      DISK_MONITOR_SESSION_SECRET: "${DISK_MONITOR_SESSION_SECRET:?Set DISK_MONITOR_SESSION_SECRET in .env}"
+      DISK_MONITOR_SESSION_HTTPS_ONLY: "${DISK_MONITOR_SESSION_HTTPS_ONLY:-false}"
+
+    volumes:
+      - /sys:/host/sys:ro
+      - /proc:/host/proc:ro
+      - /dev:/dev
+      - ./cache:/app/cache
+
+    # Application files are immutable at runtime. Only /app/cache and /tmp
+    # stay writable.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    stop_grace_period: 15s
