@@ -9,19 +9,13 @@ from fastapi.responses import HTMLResponse
 import main
 
 
-# Runtime backend version for this image. The main module remains the core
-# implementation; this entrypoint adds installation-specific startup policy.
-main.app.version = "0.22.22"
+main.app.version = "0.22.23"
 app = main.app
-
 
 FIRST_START_SMART_CHECK_FILE = Path(
     "/app/cache/first_start_smart_check.json"
 )
 
-# Determine whether this is a genuinely fresh persistent AppData/cache before
-# main's startup tasks can create any cache files. Existing installations and
-# normal container restarts therefore keep the regular no-wake startup policy.
 CACHE_DIR = FIRST_START_SMART_CHECK_FILE.parent
 try:
     CACHE_WAS_EMPTY_AT_PROCESS_START = (
@@ -35,14 +29,13 @@ _original_startup_smart_check = main.run_startup_smart_check
 _original_update_process_access = main.update_process_access
 
 
-# Runtime-only frontend addition:
-# - keep the first-run SMART status live without F5;
-# - while a full SMART check is running, freeze the already established normal
-#   closed-card height so transient SMART/USB state changes cannot move rows;
-# - when the check finishes, release that frozen height completely and measure
-#   the natural content again. The tallest currently required card then defines
-#   the shared height for every closed card.
-# No header/menu geometry or permanent card padding/min-height is changed.
+# Runtime-only frontend additions:
+# - keep first-run SMART status live without F5;
+# - once the closed-card height has settled after the first render, keep that
+#   exact height for the rest of the current layout session. SMART/USB/power
+#   state changes must not make the grid move. A deliberate layout switch or
+#   browser resize may establish a new baseline.
+# No header/menu geometry is changed.
 ROOT_HTML_RUNTIME_PATCH = r"""
 <script id="disk-monitor-smart-status-sync">
 (() => {
@@ -52,12 +45,31 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             : null
     );
 
-    let freezeDiskCardHeight = false;
-    let frozenDiskCardHeight = null;
+    let lockedDiskCardHeight = null;
+    let lockedCompactMode = null;
+    let baselineTimer = null;
+    let resizeTimer = null;
 
     const getDiskGrid = () => (
         document.getElementById("diskGrid")
     );
+
+    const getClosedCards = grid => (
+        grid
+            ? Array.from(
+                grid.querySelectorAll(
+                    ".disk-card:not(.current-access-expanded)"
+                )
+            )
+            : []
+    );
+
+    const getCompactMode = grid => {
+        const firstCard = getClosedCards(grid)[0];
+        return firstCard
+            ? firstCard.classList.contains("compact")
+            : null;
+    };
 
     const readEqualHeight = grid => {
         if (!grid) {
@@ -74,97 +86,79 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             : null;
     };
 
-    if (originalEqualizeClosedDiskCardHeights) {
-        window.equalizeClosedDiskCardHeights = grid => {
-            if (
-                freezeDiskCardHeight
-                && frozenDiskCardHeight !== null
-                && grid
-            ) {
-                grid.style.setProperty(
-                    "--disk-card-equal-height",
-                    frozenDiskCardHeight + "px"
-                );
-                return;
-            }
-
-            originalEqualizeClosedDiskCardHeights(
-                grid
-            );
-        };
-    }
-
-    const beginDiskCardHeightFreeze = () => {
-        if (freezeDiskCardHeight) {
-            return;
-        }
-
-        const grid = getDiskGrid();
-
+    const applyLockedHeight = grid => {
         if (
             !grid
-            || !originalEqualizeClosedDiskCardHeights
+            || lockedDiskCardHeight === null
         ) {
             return;
         }
-
-        originalEqualizeClosedDiskCardHeights(
-            grid
-        );
-
-        const currentHeight = readEqualHeight(
-            grid
-        );
-
-        if (currentHeight === null) {
-            return;
-        }
-
-        frozenDiskCardHeight = currentHeight;
-        freezeDiskCardHeight = true;
 
         grid.style.setProperty(
             "--disk-card-equal-height",
-            frozenDiskCardHeight + "px"
+            lockedDiskCardHeight + "px"
         );
     };
 
-    const recalculateNaturalDiskCardHeight = () => {
-        if (freezeDiskCardHeight) {
-            return;
-        }
-
+    const captureBaseline = () => {
         const grid = getDiskGrid();
+        const cards = getClosedCards(grid);
 
         if (
             !grid
+            || !cards.length
             || !originalEqualizeClosedDiskCardHeights
         ) {
             return;
         }
 
-        /*
-         * Remove the frozen value first. The original equalizer then measures
-         * every closed card at its true current content height and applies the
-         * tallest one to all cards. USB helper text therefore fits completely
-         * without keeping stale SMART-check height afterwards.
-         */
-        grid.style.removeProperty(
-            "--disk-card-equal-height"
+        originalEqualizeClosedDiskCardHeights(
+            grid
         );
 
-        originalEqualizeClosedDiskCardHeights(
+        const measured = readEqualHeight(
+            grid
+        );
+
+        if (measured === null) {
+            return;
+        }
+
+        lockedDiskCardHeight = measured;
+        lockedCompactMode = getCompactMode(
+            grid
+        );
+
+        applyLockedHeight(
             grid
         );
     };
 
-    const endDiskCardHeightFreeze = () => {
-        if (!freezeDiskCardHeight) {
-            return;
+    const scheduleBaselineCapture = () => {
+        if (baselineTimer !== null) {
+            window.clearTimeout(
+                baselineTimer
+            );
         }
 
-        freezeDiskCardHeight = false;
-        frozenDiskCardHeight = null;
+        baselineTimer = window.setTimeout(
+            () => {
+                baselineTimer = null;
+                window.requestAnimationFrame(
+                    () => {
+                        window.requestAnimationFrame(
+                            captureBaseline
+                        );
+                    }
+                );
+            },
+            350
+        );
+    };
+
+    const resetBaseline = () => {
+        lockedDiskCardHeight = null;
+        lockedCompactMode = null;
 
         const grid = getDiskGrid();
         if (grid) {
@@ -173,32 +167,89 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             );
         }
 
-        /*
-         * The final SMART result and the regular disk-data refresh can update
-         * the DOM in adjacent browser frames. Re-measure after those renders so
-         * the settled post-check card height is always based on current text.
-         */
-        window.requestAnimationFrame(
-            () => {
-                recalculateNaturalDiskCardHeight();
-                window.requestAnimationFrame(
-                    recalculateNaturalDiskCardHeight
-                );
-            }
-        );
-
-        window.setTimeout(
-            recalculateNaturalDiskCardHeight,
-            250
-        );
-
-        window.setTimeout(
-            recalculateNaturalDiskCardHeight,
-            1000
-        );
+        scheduleBaselineCapture();
     };
 
-    let lastRunning = null;
+    if (originalEqualizeClosedDiskCardHeights) {
+        window.equalizeClosedDiskCardHeights = grid => {
+            const compactMode = getCompactMode(
+                grid
+            );
+
+            if (
+                lockedDiskCardHeight !== null
+                && compactMode === lockedCompactMode
+            ) {
+                applyLockedHeight(
+                    grid
+                );
+                return;
+            }
+
+            originalEqualizeClosedDiskCardHeights(
+                grid
+            );
+
+            scheduleBaselineCapture();
+        };
+    }
+
+    const maintainLockedHeight = () => {
+        const grid = getDiskGrid();
+        if (!grid) {
+            return;
+        }
+
+        const compactMode = getCompactMode(
+            grid
+        );
+
+        if (
+            lockedDiskCardHeight !== null
+            && compactMode !== null
+            && lockedCompactMode !== null
+            && compactMode !== lockedCompactMode
+        ) {
+            resetBaseline();
+            return;
+        }
+
+        if (lockedDiskCardHeight !== null) {
+            applyLockedHeight(
+                grid
+            );
+            return;
+        }
+
+        if (getClosedCards(grid).length) {
+            scheduleBaselineCapture();
+        }
+    };
+
+    window.addEventListener(
+        "resize",
+        () => {
+            if (resizeTimer !== null) {
+                window.clearTimeout(
+                    resizeTimer
+                );
+            }
+
+            resizeTimer = window.setTimeout(
+                () => {
+                    resizeTimer = null;
+                    resetBaseline();
+                },
+                250
+            );
+        }
+    );
+
+    maintainLockedHeight();
+    window.setInterval(
+        maintainLockedHeight,
+        250
+    );
 
     const syncSmartFullCheckStatus = async () => {
         if (document.hidden) {
@@ -216,17 +267,6 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             }
 
             const checkState = await response.json();
-            const running = Boolean(
-                checkState && checkState.running
-            );
-
-            /*
-             * Keep trying while running until the disk grid has been rendered
-             * and a real normal card height could be captured.
-             */
-            if (running) {
-                beginDiskCardHeightFreeze();
-            }
 
             if (
                 typeof window.applySmartFullCheckState
@@ -236,16 +276,9 @@ ROOT_HTML_RUNTIME_PATCH = r"""
                     checkState
                 );
             }
-
-            if (!running && lastRunning === true) {
-                endDiskCardHeightFreeze();
-            }
-
-            lastRunning = running;
         }
         catch (_) {
-            // Container restarts can temporarily make the API unavailable.
-            // The next interval retries automatically.
+            // A container restart can make the API temporarily unavailable.
         }
     };
 
@@ -284,8 +317,6 @@ async def serve_root_with_runtime_frontend_patch(
     request,
     call_next
 ):
-    """Serve the dashboard with the small runtime status/layout fixes."""
-
     if (
         request.method == "GET"
         and request.url.path == "/"
@@ -304,15 +335,6 @@ async def serve_root_with_runtime_frontend_patch(
 
 
 def update_process_access_without_full_check_smartctl():
-    """Hide Disk Monitor's own smartctl I/O during a full SMART check.
-
-    The process-access tracker intentionally sees raw /dev file descriptors.
-    During a full SMART check that can make the smartctl subprocess look like
-    user/application disk activity and temporarily grow Current Access rows.
-    Remove only smartctl raw-device entries while the full-check worker is
-    active. Normal process attribution is otherwise untouched.
-    """
-
     _original_update_process_access()
 
     try:
@@ -330,46 +352,30 @@ def update_process_access_without_full_check_smartctl():
                 device
             )
 
-            if not isinstance(
-                bucket,
-                dict
-            ):
+            if not isinstance(bucket, dict):
                 continue
 
             remove_keys = []
 
             for key, entry in bucket.items():
-                if not isinstance(
-                    entry,
-                    dict
-                ):
+                if not isinstance(entry, dict):
                     continue
 
                 process_name = str(
-                    entry.get("process")
-                    or ""
+                    entry.get("process") or ""
                 ).strip().lower()
-
                 target_path = str(
-                    entry.get("path")
-                    or ""
+                    entry.get("path") or ""
                 )
 
                 if (
                     process_name == "smartctl"
-                    and target_path.startswith(
-                        "/dev/"
-                    )
+                    and target_path.startswith("/dev/")
                 ):
-                    remove_keys.append(
-                        key
-                    )
+                    remove_keys.append(key)
 
             for key in remove_keys:
-                bucket.pop(
-                    key,
-                    None
-                )
+                bucket.pop(key, None)
 
             if not bucket:
                 main.current_process_access.pop(
@@ -378,32 +384,18 @@ def update_process_access_without_full_check_smartctl():
                 )
 
     except Exception:
-        # Process attribution is diagnostic only and must never interfere with
-        # the disk monitor loop or the SMART check itself.
         pass
 
 
-# monitor_disks() resolves update_process_access from main's globals at runtime.
-# Replacing this function therefore filters only the diagnostic access list;
-# it does not change disk activity counters, SMART, power state or standby.
 main.update_process_access = (
     update_process_access_without_full_check_smartctl
 )
 
 
 async def seed_first_run_storage_usage():
-    """Seed used/total capacity only inside the genuine first-run path.
-
-    The first-run full SMART check has already deliberately woken the drives,
-    so touching mounted filesystems here cannot be the event that wakes them.
-    This function bypasses the normal no-wake capacity gate locally and does
-    not replace or modify the normal monitoring policy.
-    """
-
     disk_list = await asyncio.to_thread(
         main.get_disks
     )
-
     mountinfo_map = await asyncio.to_thread(
         main.get_host_mountinfo_map
     )
@@ -443,8 +435,6 @@ async def seed_first_run_storage_usage():
                 True
             )
 
-    # Re-run the normal summarizer. The values just seeded above are now fresh
-    # cache entries, so this does not need to bypass the normal no-wake gate.
     return await asyncio.to_thread(
         main.get_storage_usage_summary,
         disk_list
@@ -452,13 +442,6 @@ async def seed_first_run_storage_usage():
 
 
 async def run_startup_smart_check_with_first_install():
-    """Run one full SMART check only on a genuinely fresh installation.
-
-    A fresh persistent cache triggers exactly one wake-all initialization pass.
-    Every later container/application start delegates to main.py's original
-    no-wake startup SMART logic.
-    """
-
     first_install = (
         CACHE_WAS_EMPTY_AT_PROCESS_START
         and not FIRST_START_SMART_CHECK_FILE.exists()
@@ -468,12 +451,8 @@ async def run_startup_smart_check_with_first_install():
         await _original_startup_smart_check()
         return
 
-    # Give /dev and sysfs a short moment to settle after container startup.
     await asyncio.sleep(3)
 
-    # Reuse the full-check worker so the initial result is identical to a
-    # manual SMART CHECK: sleeping HDDs may be woken, results are persisted,
-    # and the header/per-drive check state is populated.
     await asyncio.to_thread(
         main.smart_full_check_worker
     )
@@ -490,8 +469,6 @@ async def run_startup_smart_check_with_first_install():
         else []
     )
 
-    # If no devices were visible yet, do not mark initialization as complete.
-    # A later process start can try again.
     if not results:
         return
 
@@ -523,16 +500,12 @@ async def run_startup_smart_check_with_first_install():
     storage_usage_seeded = False
 
     try:
-        storage_usage = (
-            await seed_first_run_storage_usage()
-        )
+        storage_usage = await seed_first_run_storage_usage()
         storage_usage_seeded = bool(
             isinstance(storage_usage, dict)
             and storage_usage.get("available")
         )
     except Exception:
-        # SMART initialization has already succeeded. A capacity-read failure
-        # must not prevent the application from starting.
         storage_usage_seeded = False
 
     try:
@@ -554,8 +527,7 @@ async def run_startup_smart_check_with_first_install():
                     "succeeded": succeeded,
                     "failed": failed,
                     "full_check_state": True,
-                    "storage_usage_seeded":
-                        storage_usage_seeded
+                    "storage_usage_seeded": storage_usage_seeded
                 },
                 ensure_ascii=False,
                 indent=2
@@ -566,14 +538,9 @@ async def run_startup_smart_check_with_first_install():
             FIRST_START_SMART_CHECK_FILE
         )
     except Exception:
-        # The full-check state itself has already been persisted by main.py.
-        # Failure to update the first-run marker must not break startup.
         pass
 
 
-# startup_event() in main.py resolves this global at runtime. Replacing this
-# one startup function changes only first-install startup policy; the scheduled
-# SMART automation, history monitor and manual endpoints remain in main.py.
 main.run_startup_smart_check = (
     run_startup_smart_check_with_first_install
 )
