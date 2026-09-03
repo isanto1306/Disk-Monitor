@@ -6,7 +6,7 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 
 ## Current development versions
 
-- Backend: `0.22.15`
+- Backend: `0.22.16`
 - Frontend: `0.32.77`
 
 ## Docker image
@@ -25,7 +25,7 @@ ghcr.io/isanto1306/disk-monitor:latest
 - SMART health, temperature and detailed SMART attributes
 - SMART history
 - Manual SMART refresh and full SMART check
-- One-time first-install SMART refresh across all detected drives
+- One-time first-install full SMART check across all detected drives
 - Automatic SMART refresh: Off, 1×, 2× or 3× daily
 - Normal automatic SMART checks avoid waking sleeping HDDs
 - RAID detection, RAID member overview and SMART integration
@@ -100,13 +100,14 @@ http://<ZIMAOS-HOST>:8999
 
 ### Initial SMART check on a fresh installation
 
-On the first start of a **fresh installation**, Disk Monitor performs one initial SMART refresh across all detected physical drives.
+On the first start of a **fresh installation**, Disk Monitor performs one full SMART check across all detected physical drives.
 
 This first check is intentionally different from normal monitoring:
 
 - Sleeping mechanical HDDs may be woken so the initial SMART data can be collected.
 - SATA/SAS HDDs, supported USB HDDs, SSDs and NVMe drives are included when detected and supported by the controller/bridge.
 - The check is attempted once for every detected physical drive.
+- The same persistent result state used by the manual **SMART CHECK** is written automatically, so the header status and per-drive results reflect the first-run check.
 - A persistent marker is stored in the Disk Monitor cache after the initial pass, so ordinary container restarts do **not** wake all HDDs again.
 - If a controller or USB bridge does not support SMART correctly, the check for that device can fail even though the drive itself is otherwise usable.
 
