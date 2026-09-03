@@ -1,0 +1,25 @@
+# Private configuration
+.env
+.env.*
+!.env.example
+
+# Runtime data
+cache/*
+!cache/.gitkeep
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local release/test archives
+*.zip
+*.tar
+*.tar.gz
