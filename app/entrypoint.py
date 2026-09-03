@@ -11,7 +11,7 @@ import main
 
 # Runtime backend version for this image. The main module remains the core
 # implementation; this entrypoint adds installation-specific startup policy.
-main.app.version = "0.22.21"
+main.app.version = "0.22.22"
 app = main.app
 
 
@@ -37,10 +37,11 @@ _original_update_process_access = main.update_process_access
 
 # Runtime-only frontend addition:
 # - keep the first-run SMART status live without F5;
-# - during a full SMART check, freeze the already established normal closed-card
-#   height instead of adding permanent empty space. After the check, the same
-#   height becomes a temporary page-session floor so disappearing USB/SMART
-#   helper rows cannot make the grid jump upward.
+# - while a full SMART check is running, freeze the already established normal
+#   closed-card height so transient SMART/USB state changes cannot move rows;
+# - when the check finishes, release that frozen height completely and measure
+#   the natural content again. The tallest currently required card then defines
+#   the shared height for every closed card.
 # No header/menu geometry or permanent card padding/min-height is changed.
 ROOT_HTML_RUNTIME_PATCH = r"""
 <script id="disk-monitor-smart-status-sync">
@@ -52,7 +53,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
     );
 
     let freezeDiskCardHeight = false;
-    let smartCheckHeightFloor = null;
+    let frozenDiskCardHeight = null;
 
     const getDiskGrid = () => (
         document.getElementById("diskGrid")
@@ -75,32 +76,21 @@ ROOT_HTML_RUNTIME_PATCH = r"""
 
     if (originalEqualizeClosedDiskCardHeights) {
         window.equalizeClosedDiskCardHeights = grid => {
-            if (freezeDiskCardHeight) {
+            if (
+                freezeDiskCardHeight
+                && frozenDiskCardHeight !== null
+                && grid
+            ) {
+                grid.style.setProperty(
+                    "--disk-card-equal-height",
+                    frozenDiskCardHeight + "px"
+                );
                 return;
             }
 
             originalEqualizeClosedDiskCardHeights(
                 grid
             );
-
-            if (
-                smartCheckHeightFloor !== null
-                && grid
-            ) {
-                const measured = readEqualHeight(
-                    grid
-                );
-
-                if (
-                    measured !== null
-                    && measured < smartCheckHeightFloor
-                ) {
-                    grid.style.setProperty(
-                        "--disk-card-equal-height",
-                        smartCheckHeightFloor + "px"
-                    );
-                }
-            }
         };
     }
 
@@ -112,30 +102,60 @@ ROOT_HTML_RUNTIME_PATCH = r"""
         const grid = getDiskGrid();
 
         if (
-            grid
-            && originalEqualizeClosedDiskCardHeights
+            !grid
+            || !originalEqualizeClosedDiskCardHeights
         ) {
-            originalEqualizeClosedDiskCardHeights(
-                grid
-            );
-
-            const currentHeight = readEqualHeight(
-                grid
-            );
-
-            if (currentHeight !== null) {
-                smartCheckHeightFloor = (
-                    smartCheckHeightFloor === null
-                        ? currentHeight
-                        : Math.max(
-                            smartCheckHeightFloor,
-                            currentHeight
-                        )
-                );
-            }
+            return;
         }
 
+        originalEqualizeClosedDiskCardHeights(
+            grid
+        );
+
+        const currentHeight = readEqualHeight(
+            grid
+        );
+
+        if (currentHeight === null) {
+            return;
+        }
+
+        frozenDiskCardHeight = currentHeight;
         freezeDiskCardHeight = true;
+
+        grid.style.setProperty(
+            "--disk-card-equal-height",
+            frozenDiskCardHeight + "px"
+        );
+    };
+
+    const recalculateNaturalDiskCardHeight = () => {
+        if (freezeDiskCardHeight) {
+            return;
+        }
+
+        const grid = getDiskGrid();
+
+        if (
+            !grid
+            || !originalEqualizeClosedDiskCardHeights
+        ) {
+            return;
+        }
+
+        /*
+         * Remove the frozen value first. The original equalizer then measures
+         * every closed card at its true current content height and applies the
+         * tallest one to all cards. USB helper text therefore fits completely
+         * without keeping stale SMART-check height afterwards.
+         */
+        grid.style.removeProperty(
+            "--disk-card-equal-height"
+        );
+
+        originalEqualizeClosedDiskCardHeights(
+            grid
+        );
     };
 
     const endDiskCardHeightFreeze = () => {
@@ -144,17 +164,38 @@ ROOT_HTML_RUNTIME_PATCH = r"""
         }
 
         freezeDiskCardHeight = false;
+        frozenDiskCardHeight = null;
 
         const grid = getDiskGrid();
-        if (
-            grid
-            && typeof window.equalizeClosedDiskCardHeights
-                === "function"
-        ) {
-            window.equalizeClosedDiskCardHeights(
-                grid
+        if (grid) {
+            grid.style.removeProperty(
+                "--disk-card-equal-height"
             );
         }
+
+        /*
+         * The final SMART result and the regular disk-data refresh can update
+         * the DOM in adjacent browser frames. Re-measure after those renders so
+         * the settled post-check card height is always based on current text.
+         */
+        window.requestAnimationFrame(
+            () => {
+                recalculateNaturalDiskCardHeight();
+                window.requestAnimationFrame(
+                    recalculateNaturalDiskCardHeight
+                );
+            }
+        );
+
+        window.setTimeout(
+            recalculateNaturalDiskCardHeight,
+            250
+        );
+
+        window.setTimeout(
+            recalculateNaturalDiskCardHeight,
+            1000
+        );
     };
 
     let lastRunning = null;
@@ -179,14 +220,13 @@ ROOT_HTML_RUNTIME_PATCH = r"""
                 checkState && checkState.running
             );
 
-            if (running && lastRunning !== true) {
+            /*
+             * Keep trying while running until the disk grid has been rendered
+             * and a real normal card height could be captured.
+             */
+            if (running) {
                 beginDiskCardHeightFreeze();
             }
-            else if (!running && lastRunning === true) {
-                endDiskCardHeightFreeze();
-            }
-
-            lastRunning = running;
 
             if (
                 typeof window.applySmartFullCheckState
@@ -196,6 +236,12 @@ ROOT_HTML_RUNTIME_PATCH = r"""
                     checkState
                 );
             }
+
+            if (!running && lastRunning === true) {
+                endDiskCardHeightFreeze();
+            }
+
+            lastRunning = running;
         }
         catch (_) {
             // Container restarts can temporarily make the API unavailable.
