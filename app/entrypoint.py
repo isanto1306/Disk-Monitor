@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 import main
 
 
-main.app.version = "0.22.23"
+main.app.version = "0.22.24"
 app = main.app
 
 FIRST_START_SMART_CHECK_FILE = Path(
@@ -49,6 +49,8 @@ ROOT_HTML_RUNTIME_PATCH = r"""
     let lockedCompactMode = null;
     let baselineTimer = null;
     let resizeTimer = null;
+    let observedGrid = null;
+    let gridStyleObserver = null;
 
     const getDiskGrid = () => (
         document.getElementById("diskGrid")
@@ -94,13 +96,54 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             return;
         }
 
+        const currentHeight = readEqualHeight(
+            grid
+        );
+
+        if (currentHeight === lockedDiskCardHeight) {
+            return;
+        }
+
         grid.style.setProperty(
             "--disk-card-equal-height",
             lockedDiskCardHeight + "px"
         );
     };
 
+    const ensureGridStyleObserver = () => {
+        const grid = getDiskGrid();
+
+        if (!grid || grid === observedGrid) {
+            return;
+        }
+
+        if (gridStyleObserver) {
+            gridStyleObserver.disconnect();
+        }
+
+        observedGrid = grid;
+        gridStyleObserver = new MutationObserver(
+            () => {
+                if (lockedDiskCardHeight !== null) {
+                    applyLockedHeight(
+                        observedGrid
+                    );
+                }
+            }
+        );
+
+        gridStyleObserver.observe(
+            grid,
+            {
+                attributes: true,
+                attributeFilter: ["style"]
+            }
+        );
+    };
+
     const captureBaseline = () => {
+        ensureGridStyleObserver();
+
         const grid = getDiskGrid();
         const cards = getClosedCards(grid);
 
@@ -136,9 +179,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
 
     const scheduleBaselineCapture = () => {
         if (baselineTimer !== null) {
-            window.clearTimeout(
-                baselineTimer
-            );
+            return;
         }
 
         baselineTimer = window.setTimeout(
@@ -195,6 +236,8 @@ ROOT_HTML_RUNTIME_PATCH = r"""
     }
 
     const maintainLockedHeight = () => {
+        ensureGridStyleObserver();
+
         const grid = getDiskGrid();
         if (!grid) {
             return;
