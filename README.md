@@ -2,6 +2,8 @@
 
 Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/Linux.
 
+> **Repository initialization in progress:** the public repository structure is being prepared. `app/main.py` and the current `static/index.html` have not been committed yet, so **do not clone or build this repository yet**.
+
 > **Development status:** community project / pre-release. The project is still under active development and hardware behavior can differ between SATA/SAS, NVMe and USB bridge controllers.
 
 ## Current development versions
@@ -61,6 +63,8 @@ Never commit or share:
 - host logs containing private paths or machine-specific information
 
 ## Installation
+
+The commands below will apply **after the current source files have been added to the repository**.
 
 ```bash
 git clone https://github.com/isanto1306/Disk-Monitor.git disk-monitor
