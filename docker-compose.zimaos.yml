@@ -1,0 +1,92 @@
+name: disk-monitor
+
+services:
+  disk-monitor:
+    container_name: disk-monitor
+    image: ghcr.io/isanto1306/disk-monitor:latest
+    restart: unless-stopped
+    init: true
+
+    # Host networking is required so Disk Monitor can reach the ZimaOS
+    # local-storage service on 127.0.0.1 and serve the UI on port 8999.
+    network_mode: host
+
+    # Required by the current hardware-integration design for SMART and
+    # explicit standby commands.
+    privileged: true
+
+    environment:
+      DISK_MONITOR_USERNAME: "CHANGE_ME_USERNAME"
+      DISK_MONITOR_PASSWORD: "CHANGE_ME_PASSWORD_AT_LEAST_12_CHARS"
+      DISK_MONITOR_SESSION_SECRET: "CHANGE_ME_SESSION_SECRET_AT_LEAST_32_CHARS"
+      DISK_MONITOR_SESSION_HTTPS_ONLY: "false"
+
+    volumes:
+      - /sys:/host/sys:ro
+      - /proc:/host/proc:ro
+      - /dev:/dev
+      - /DATA/AppData/$AppID/cache:/app/cache
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    stop_grace_period: 15s
+
+    # These descriptions are used by CasaOS/ZimaOS-style custom-app forms.
+    x-casaos:
+      envs:
+        - container: DISK_MONITOR_USERNAME
+          description:
+            en_US: Disk Monitor login username. Change before installation.
+            de_DE: Benutzername für Disk Monitor. Vor der Installation ändern.
+        - container: DISK_MONITOR_PASSWORD
+          description:
+            en_US: Disk Monitor login password (at least 12 characters). Change before installation.
+            de_DE: Passwort für Disk Monitor (mindestens 12 Zeichen). Vor der Installation ändern.
+        - container: DISK_MONITOR_SESSION_SECRET
+          description:
+            en_US: Private session secret (at least 32 characters). Generate a unique random value before installation.
+            de_DE: Privates Session-Geheimnis (mindestens 32 Zeichen). Vor der Installation einen eindeutigen Zufallswert eintragen.
+        - container: DISK_MONITOR_SESSION_HTTPS_ONLY
+          description:
+            en_US: Set to true only when Disk Monitor is served exclusively over HTTPS.
+            de_DE: Nur auf true setzen, wenn Disk Monitor ausschließlich über HTTPS bereitgestellt wird.
+      volumes:
+        - container: /app/cache
+          description:
+            en_US: Persistent SMART history and Disk Monitor runtime cache.
+            de_DE: Persistenter SMART-Verlauf und Laufzeit-Cache von Disk Monitor.
+
+x-casaos:
+  id: com.isanto1306.disk-monitor
+  main: disk-monitor
+  index: /
+  port_map: "8999"
+  scheme: http
+  icon: https://raw.githubusercontent.com/isanto1306/Disk-Monitor/main/static/web-app-icon-512.png
+  title:
+    en_US: Disk Monitor
+    de_DE: Disk Monitor
+  tagline:
+    en_US: Storage, SMART and disk activity monitoring for ZimaOS/Linux
+    de_DE: Speicher-, SMART- und Festplattenaktivitätsüberwachung für ZimaOS/Linux
+  description:
+    en_US: Self-hosted disk monitoring dashboard with SMART health, temperature, standby state, activity and RAID information.
+    de_DE: Selbst gehostetes Festplatten-Dashboard mit SMART-Zustand, Temperatur, Standby-Status, Aktivität und RAID-Informationen.
+  author: isanto1306
+  developer: isanto1306
+  category: Utilities
+  architectures:
+    - amd64
+  version: "0.32.77"
+  update_at: "2026-09-03"
+  repo: https://github.com/isanto1306/Disk-Monitor
+  support: https://github.com/isanto1306/Disk-Monitor/issues
+  docs: https://github.com/isanto1306/Disk-Monitor#readme
