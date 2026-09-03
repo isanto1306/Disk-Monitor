@@ -1,3 +1,5 @@
+name: disk-monitor
+
 services:
   disk-monitor:
     container_name: disk-monitor
@@ -42,3 +44,30 @@ services:
         max-file: "3"
 
     stop_grace_period: 15s
+
+x-casaos:
+  id: com.isanto1306.disk-monitor
+  main: disk-monitor
+  index: /
+  port_map: "8999"
+  scheme: http
+  icon: https://raw.githubusercontent.com/isanto1306/Disk-Monitor/main/static/web-app-icon-512.png
+  title:
+    en_US: Disk Monitor
+    de_DE: Disk Monitor
+  tagline:
+    en_US: Storage, SMART and disk activity monitoring for ZimaOS/Linux
+    de_DE: Speicher-, SMART- und Festplattenaktivitätsüberwachung für ZimaOS/Linux
+  description:
+    en_US: Self-hosted disk monitoring dashboard with SMART health, temperature, standby state, activity and RAID information.
+    de_DE: Selbst gehostetes Festplatten-Dashboard mit SMART-Zustand, Temperatur, Standby-Status, Aktivität und RAID-Informationen.
+  author: isanto1306
+  developer: isanto1306
+  category: Utilities
+  architectures:
+    - amd64
+  version: "0.32.77"
+  update_at: "2026-09-03"
+  repo: https://github.com/isanto1306/Disk-Monitor
+  support: https://github.com/isanto1306/Disk-Monitor/issues
+  docs: https://github.com/isanto1306/Disk-Monitor#readme
