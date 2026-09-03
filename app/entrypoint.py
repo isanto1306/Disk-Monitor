@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 import main
 
 
-main.app.version = "0.22.26"
+main.app.version = "0.22.27"
 app = main.app
 
 FIRST_START_SMART_CHECK_FILE = Path(
@@ -31,13 +31,11 @@ _original_update_process_access = main.update_process_access
 
 # Runtime-only frontend additions:
 # - keep first-run SMART status live without F5;
-# - reserve the browser scrollbar gutter so expanding content does not shift
-#   the dashboard horizontally;
 # - once the closed-card height has settled after the first render, keep that
 #   exact height for the rest of the current layout session. SMART/USB/power
 #   state changes must not make the grid move. A deliberate layout switch or
 #   browser resize may establish a new baseline.
-# No other header/menu geometry is changed.
+# No header/menu geometry is changed.
 ROOT_HTML_RUNTIME_PATCH = r"""
 <script id="disk-monitor-smart-status-sync">
 (() => {
@@ -354,31 +352,12 @@ ROOT_HTML_RUNTIME_PATCH = r"""
 </script>
 """
 
-STABLE_SCROLLBAR_GUTTER_STYLE = r"""
-<style id="disk-monitor-stable-scrollbar-gutter">
-html {
-    scrollbar-gutter: stable;
-}
-</style>
-"""
-
 try:
     _index_html = (
         main.STATIC_DIR / "index.html"
     ).read_text(
         encoding="utf-8"
     )
-
-    if (
-        "disk-monitor-stable-scrollbar-gutter"
-        not in _index_html
-    ):
-        _index_html = _index_html.replace(
-            "</head>",
-            STABLE_SCROLLBAR_GUTTER_STYLE
-            + "\n</head>",
-            1
-        )
 
     if (
         "disk-monitor-smart-status-sync"
