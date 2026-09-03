@@ -11,7 +11,7 @@ import main
 
 # Runtime backend version for this image. The main module remains the core
 # implementation; this entrypoint adds installation-specific startup policy.
-main.app.version = "0.22.20"
+main.app.version = "0.22.21"
 app = main.app
 
 
@@ -35,29 +35,130 @@ _original_startup_smart_check = main.run_startup_smart_check
 _original_update_process_access = main.update_process_access
 
 
-# Runtime-only frontend additions:
+# Runtime-only frontend addition:
 # - keep the first-run SMART status live without F5;
-# - reserve enough space for the maximum Current Access preview in Comfortable
-#   layout;
-# - reserve footer space for dynamic USB power/standby and SMART helper text so
-#   those state changes cannot resize closed disk cards.
-# No header/menu geometry or styling is changed.
+# - during a full SMART check, freeze the already established normal closed-card
+#   height instead of adding permanent empty space. After the check, the same
+#   height becomes a temporary page-session floor so disappearing USB/SMART
+#   helper rows cannot make the grid jump upward.
+# No header/menu geometry or permanent card padding/min-height is changed.
 ROOT_HTML_RUNTIME_PATCH = r"""
-<style id="disk-monitor-current-access-stable-height">
-.disk-card:not(.compact) .disk-current-access {
-    min-height: 180px !important;
-}
-
-.disk-card:not(.compact) .footer-section {
-    min-height: 105px !important;
-}
-
-.disk-card.compact .footer-section:first-child {
-    min-height: 90px !important;
-}
-</style>
 <script id="disk-monitor-smart-status-sync">
 (() => {
+    const originalEqualizeClosedDiskCardHeights = (
+        typeof window.equalizeClosedDiskCardHeights === "function"
+            ? window.equalizeClosedDiskCardHeights
+            : null
+    );
+
+    let freezeDiskCardHeight = false;
+    let smartCheckHeightFloor = null;
+
+    const getDiskGrid = () => (
+        document.getElementById("diskGrid")
+    );
+
+    const readEqualHeight = grid => {
+        if (!grid) {
+            return null;
+        }
+
+        const raw = grid.style.getPropertyValue(
+            "--disk-card-equal-height"
+        );
+        const value = Number.parseFloat(raw);
+
+        return Number.isFinite(value) && value > 0
+            ? value
+            : null;
+    };
+
+    if (originalEqualizeClosedDiskCardHeights) {
+        window.equalizeClosedDiskCardHeights = grid => {
+            if (freezeDiskCardHeight) {
+                return;
+            }
+
+            originalEqualizeClosedDiskCardHeights(
+                grid
+            );
+
+            if (
+                smartCheckHeightFloor !== null
+                && grid
+            ) {
+                const measured = readEqualHeight(
+                    grid
+                );
+
+                if (
+                    measured !== null
+                    && measured < smartCheckHeightFloor
+                ) {
+                    grid.style.setProperty(
+                        "--disk-card-equal-height",
+                        smartCheckHeightFloor + "px"
+                    );
+                }
+            }
+        };
+    }
+
+    const beginDiskCardHeightFreeze = () => {
+        if (freezeDiskCardHeight) {
+            return;
+        }
+
+        const grid = getDiskGrid();
+
+        if (
+            grid
+            && originalEqualizeClosedDiskCardHeights
+        ) {
+            originalEqualizeClosedDiskCardHeights(
+                grid
+            );
+
+            const currentHeight = readEqualHeight(
+                grid
+            );
+
+            if (currentHeight !== null) {
+                smartCheckHeightFloor = (
+                    smartCheckHeightFloor === null
+                        ? currentHeight
+                        : Math.max(
+                            smartCheckHeightFloor,
+                            currentHeight
+                        )
+                );
+            }
+        }
+
+        freezeDiskCardHeight = true;
+    };
+
+    const endDiskCardHeightFreeze = () => {
+        if (!freezeDiskCardHeight) {
+            return;
+        }
+
+        freezeDiskCardHeight = false;
+
+        const grid = getDiskGrid();
+        if (
+            grid
+            && typeof window.equalizeClosedDiskCardHeights
+                === "function"
+        ) {
+            window.equalizeClosedDiskCardHeights(
+                grid
+            );
+        }
+    };
+
+    let lastRunning = null;
+
     const syncSmartFullCheckStatus = async () => {
         if (document.hidden) {
             return;
@@ -74,6 +175,18 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             }
 
             const checkState = await response.json();
+            const running = Boolean(
+                checkState && checkState.running
+            );
+
+            if (running && lastRunning !== true) {
+                beginDiskCardHeightFreeze();
+            }
+            else if (!running && lastRunning === true) {
+                endDiskCardHeightFreeze();
+            }
+
+            lastRunning = running;
 
             if (
                 typeof window.applySmartFullCheckState
@@ -93,7 +206,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
     syncSmartFullCheckStatus();
     window.setInterval(
         syncSmartFullCheckStatus,
-        2000
+        500
     );
 })();
 </script>
