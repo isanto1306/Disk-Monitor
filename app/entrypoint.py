@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 import main
 
 
-main.app.version = "0.22.28"
+main.app.version = "0.22.29"
 app = main.app
 
 FIRST_START_SMART_CHECK_FILE = Path(
@@ -31,8 +31,9 @@ _original_update_process_access = main.update_process_access
 
 # Runtime-only frontend additions:
 # - keep first-run SMART status live without F5;
-# - compensate only the disk grid by half of the real browser scrollbar width,
-#   without reserving a permanent scrollbar gutter;
+# - when the browser scrollbar appears, keep the dashboard's effective layout
+#   width unchanged instead of shifting only the disk grid or reserving a
+#   permanent scrollbar gutter;
 # - once the closed-card height has settled after the first render, keep that
 #   exact height for the rest of the current layout session. SMART/USB/power
 #   state changes must not make the grid move. A deliberate layout switch or
@@ -53,11 +54,20 @@ ROOT_HTML_RUNTIME_PATCH = r"""
     let resizeTimer = null;
     let observedGrid = null;
     let gridStyleObserver = null;
-    let scrollbarObservedGrid = null;
-    let scrollbarGridResizeObserver = null;
     let scrollbarViewportResizeObserver = null;
     let scrollbarCompensationFrame = null;
-    let lastScrollbarCompensation = null;
+    let lastScrollbarWidth = null;
+
+    const originalBodyInlineWidth = (
+        document.body
+            ? document.body.style.getPropertyValue("width")
+            : ""
+    );
+    const originalRootInlineOverflowX = (
+        document.documentElement.style.getPropertyValue(
+            "overflow-x"
+        )
+    );
 
     const getDiskGrid = () => (
         document.getElementById("diskGrid")
@@ -80,9 +90,36 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             : null;
     };
 
-    const syncScrollbarCenterCompensation = () => {
-        const grid = getDiskGrid();
-        if (!grid) {
+    const restoreOriginalScrollbarLayout = () => {
+        if (document.body) {
+            if (originalBodyInlineWidth) {
+                document.body.style.setProperty(
+                    "width",
+                    originalBodyInlineWidth
+                );
+            }
+            else {
+                document.body.style.removeProperty(
+                    "width"
+                );
+            }
+        }
+
+        if (originalRootInlineOverflowX) {
+            document.documentElement.style.setProperty(
+                "overflow-x",
+                originalRootInlineOverflowX
+            );
+        }
+        else {
+            document.documentElement.style.removeProperty(
+                "overflow-x"
+            );
+        }
+    };
+
+    const syncScrollbarLayoutWidth = () => {
+        if (!document.body) {
             return;
         }
 
@@ -92,39 +129,43 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             - document.documentElement.clientWidth
         );
 
-        const compensation = (
-            scrollbarWidth > 0
-                ? scrollbarWidth / 2
-                : 0
-        );
-
         if (
-            lastScrollbarCompensation !== null
+            lastScrollbarWidth !== null
             && Math.abs(
-                compensation
-                - lastScrollbarCompensation
+                scrollbarWidth
+                - lastScrollbarWidth
             ) < 0.01
         ) {
             return;
         }
 
-        lastScrollbarCompensation = compensation;
+        lastScrollbarWidth = scrollbarWidth;
 
-        if (compensation > 0) {
-            grid.style.transform = (
-                "translateX("
-                + compensation
-                + "px)"
-            );
-        }
-        else {
+        const grid = getDiskGrid();
+        if (grid) {
             grid.style.removeProperty(
                 "transform"
             );
         }
+
+        if (scrollbarWidth > 0) {
+            document.body.style.setProperty(
+                "width",
+                "calc(100% + "
+                + scrollbarWidth
+                + "px)"
+            );
+            document.documentElement.style.setProperty(
+                "overflow-x",
+                "clip"
+            );
+        }
+        else {
+            restoreOriginalScrollbarLayout();
+        }
     };
 
-    const scheduleScrollbarCenterCompensation = () => {
+    const scheduleScrollbarLayoutWidth = () => {
         if (scrollbarCompensationFrame !== null) {
             return;
         }
@@ -133,51 +174,28 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             window.requestAnimationFrame(
                 () => {
                     scrollbarCompensationFrame = null;
-                    syncScrollbarCenterCompensation();
+                    syncScrollbarLayoutWidth();
                 }
             )
         );
     };
 
-    const ensureScrollbarCompensationObservers = () => {
-        const grid = getDiskGrid();
-
+    const ensureScrollbarCompensationObserver = () => {
         if (
-            typeof ResizeObserver === "function"
-            && !scrollbarViewportResizeObserver
-        ) {
-            scrollbarViewportResizeObserver = (
-                new ResizeObserver(
-                    scheduleScrollbarCenterCompensation
-                )
-            );
-
-            scrollbarViewportResizeObserver.observe(
-                document.documentElement
-            );
-        }
-
-        if (
-            !grid
-            || grid === scrollbarObservedGrid
-            || typeof ResizeObserver !== "function"
+            typeof ResizeObserver !== "function"
+            || scrollbarViewportResizeObserver
         ) {
             return;
         }
 
-        if (scrollbarGridResizeObserver) {
-            scrollbarGridResizeObserver.disconnect();
-        }
-
-        scrollbarObservedGrid = grid;
-        scrollbarGridResizeObserver = (
+        scrollbarViewportResizeObserver = (
             new ResizeObserver(
-                scheduleScrollbarCenterCompensation
+                scheduleScrollbarLayoutWidth
             )
         );
 
-        scrollbarGridResizeObserver.observe(
-            grid
+        scrollbarViewportResizeObserver.observe(
+            document.documentElement
         );
     };
 
@@ -251,7 +269,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
 
     const captureBaseline = () => {
         ensureGridStyleObserver();
-        ensureScrollbarCompensationObservers();
+        ensureScrollbarCompensationObserver();
 
         const grid = getDiskGrid();
         const cards = getClosedCards(grid);
@@ -284,7 +302,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
         applyLockedHeight(
             grid
         );
-        scheduleScrollbarCenterCompensation();
+        scheduleScrollbarLayoutWidth();
     };
 
     const scheduleBaselineCapture = () => {
@@ -334,7 +352,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
                 applyLockedHeight(
                     grid
                 );
-                scheduleScrollbarCenterCompensation();
+                scheduleScrollbarLayoutWidth();
                 return;
             }
 
@@ -343,16 +361,17 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             );
 
             scheduleBaselineCapture();
-            scheduleScrollbarCenterCompensation();
+            scheduleScrollbarLayoutWidth();
         };
     }
 
     const maintainLockedHeight = () => {
         ensureGridStyleObserver();
-        ensureScrollbarCompensationObservers();
+        ensureScrollbarCompensationObserver();
 
         const grid = getDiskGrid();
         if (!grid) {
+            scheduleScrollbarLayoutWidth();
             return;
         }
 
@@ -367,7 +386,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             && compactMode !== lockedCompactMode
         ) {
             resetBaseline();
-            scheduleScrollbarCenterCompensation();
+            scheduleScrollbarLayoutWidth();
             return;
         }
 
@@ -375,7 +394,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             applyLockedHeight(
                 grid
             );
-            scheduleScrollbarCenterCompensation();
+            scheduleScrollbarLayoutWidth();
             return;
         }
 
@@ -383,7 +402,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             scheduleBaselineCapture();
         }
 
-        scheduleScrollbarCenterCompensation();
+        scheduleScrollbarLayoutWidth();
     };
 
     window.addEventListener(
@@ -399,8 +418,8 @@ ROOT_HTML_RUNTIME_PATCH = r"""
                 () => {
                     resizeTimer = null;
                     resetBaseline();
-                    lastScrollbarCompensation = null;
-                    scheduleScrollbarCenterCompensation();
+                    lastScrollbarWidth = null;
+                    scheduleScrollbarLayoutWidth();
                 },
                 250
             );
@@ -408,7 +427,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
     );
 
     maintainLockedHeight();
-    scheduleScrollbarCenterCompensation();
+    scheduleScrollbarLayoutWidth();
     window.setInterval(
         maintainLockedHeight,
         250
