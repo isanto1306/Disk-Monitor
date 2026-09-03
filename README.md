@@ -6,7 +6,7 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 
 ## Current development versions
 
-- Backend: `0.22.18`
+- Backend: `0.22.19`
 - Frontend: `0.32.77`
 
 ## Docker image
@@ -100,7 +100,7 @@ http://<ZIMAOS-HOST>:8999
 
 ### Initial SMART check on a fresh installation
 
-On the first start of a **fresh installation**, Disk Monitor performs one full SMART check across all detected physical drives.
+On the first start of a **genuinely fresh installation with an empty persistent Disk Monitor cache**, Disk Monitor performs one full SMART check across all detected physical drives.
 
 This first check is intentionally different from normal monitoring:
 
@@ -108,9 +108,10 @@ This first check is intentionally different from normal monitoring:
 - SATA/SAS HDDs, supported USB HDDs, SSDs and NVMe drives are included when detected and supported by the controller/bridge.
 - The check is attempted once for every detected physical drive.
 - The same persistent result state used by the manual **SMART CHECK** is written automatically, so the header status and per-drive results reflect the first-run check.
-- While the drives are deliberately awake, Disk Monitor also reads and caches filesystem usage so the **used capacity** is available in the summary and individual drive cards immediately after the first-run check.
+- While the drives are already deliberately awake for this initialization, Disk Monitor performs a first-run-only filesystem-usage read so the **used capacity** is available in the summary and individual drive cards.
 - The open dashboard periodically synchronizes the SMART full-check state, so the header/result status updates after the first-run check without requiring a manual page refresh.
-- A persistent marker is stored in the Disk Monitor cache after the initial pass, so ordinary container restarts do **not** wake all HDDs again.
+- A persistent marker is stored in the Disk Monitor cache after the initial pass. Any later container restart or normal application update with an existing cache uses the regular no-wake startup behavior and does **not** run another wake-all initialization check.
+- The first-run capacity seeding is local to this initialization path; it does not replace the normal no-wake capacity policy.
 - If a controller or USB bridge does not support SMART correctly, the check for that device can fail even though the drive itself is otherwise usable.
 
 After this one-time installation check, Disk Monitor returns to its normal no-wake behavior for automatic monitoring and scheduled SMART refreshes.
@@ -148,7 +149,7 @@ docker build -t disk-monitor-local .
 
 ## Important standby rule
 
-Normal monitoring must not wake a sleeping mechanical HDD merely to collect monitoring or SMART data. The deliberate exceptions are explicit manual actions and the one-time initial SMART refresh on a fresh installation.
+Normal monitoring must not wake a sleeping mechanical HDD merely to collect monitoring or SMART data. The deliberate exceptions are explicit manual actions and the one-time initial SMART refresh on a genuinely fresh installation.
 
 USB bridge behavior varies significantly by enclosure/controller. A state reported as estimated standby is not always equivalent to a directly queryable SATA/SAS standby state.
 
