@@ -1,6 +1,5 @@
 import asyncio
 import json
-import time
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +11,7 @@ import main
 
 # Runtime backend version for this image. The main module remains the core
 # implementation; this entrypoint adds installation-specific startup policy.
-main.app.version = "0.22.18"
+main.app.version = "0.22.19"
 app = main.app
 
 
@@ -35,13 +34,17 @@ except Exception:
 _original_startup_smart_check = main.run_startup_smart_check
 
 
-# The static frontend currently requests the SMART full-check state once when
-# the app becomes visible and then polls only for checks started manually from
-# the dialog. A first-run check can therefore complete while an already-open
-# browser still shows the old grey header state until F5. Inject a tiny status
-# synchronizer into the root HTML response. It changes no layout or styling and
-# can be removed once the same polling is folded into static/index.html.
-SMART_STATUS_SYNC_SCRIPT = r"""
+# Runtime-only frontend additions:
+# - keep the first-run SMART status live without F5;
+# - reserve enough space for the maximum three-entry Current Access preview in
+#   Comfortable layout so transient SMART I/O cannot resize closed disk cards.
+# No header/menu geometry or styling is changed.
+ROOT_HTML_RUNTIME_PATCH = r"""
+<style id="disk-monitor-current-access-stable-height">
+.disk-card:not(.compact) .disk-current-access {
+    min-height: 180px !important;
+}
+</style>
 <script id="disk-monitor-smart-status-sync">
 (() => {
     const syncSmartFullCheckStatus = async () => {
@@ -98,7 +101,7 @@ try:
     ):
         _index_html = _index_html.replace(
             "</body>",
-            SMART_STATUS_SYNC_SCRIPT
+            ROOT_HTML_RUNTIME_PATCH
             + "\n</body>",
             1
         )
@@ -107,11 +110,11 @@ except Exception:
 
 
 @app.middleware("http")
-async def serve_root_with_smart_status_sync(
+async def serve_root_with_runtime_frontend_patch(
     request,
     call_next
 ):
-    """Keep the SMART header/result state live across backend restarts."""
+    """Serve the dashboard with the small runtime status/layout fixes."""
 
     if (
         request.method == "GET"
@@ -130,89 +133,60 @@ async def serve_root_with_smart_status_sync(
     )
 
 
-def can_refresh_filesystem_usage_after_explicit_wake(
-    disks
-):
-    """Allow capacity refresh while an HDD is explicitly held awake.
-
-    Normal monitoring keeps the original no-wake behavior. The extra path is
-    only active for HDDs that a manual/first-run SMART action has deliberately
-    marked awake through main.manual_awake_until.
-    """
-
-    if not disks:
-        return False
-
-    for disk in disks:
-        disk_type = (
-            disk.get("type")
-            or "UNKNOWN"
-        )
-
-        if disk_type not in (
-            "HDD",
-            "UNKNOWN"
-        ):
-            continue
-
-        device = disk.get("device")
-        awake_until = (
-            main.manual_awake_until.get(
-                device,
-                0
-            )
-            if device
-            else 0
-        )
-
-        if time.time() < awake_until:
-            continue
-
-        activity = (
-            disk.get("activity")
-            or {}
-        )
-
-        if activity.get("status") == "ACTIVE":
-            continue
-
-        if disk.get("current_access"):
-            continue
-
-        return False
-
-    return True
-
-
-# Keep the normal no-wake capacity policy, but recognize the explicit awake
-# hold that already exists for manual/full SMART actions.
-main.can_refresh_filesystem_usage_without_wake = (
-    can_refresh_filesystem_usage_after_explicit_wake
-)
-
-
 async def seed_first_run_storage_usage():
-    """Populate used/total capacity while first-run disks are already awake."""
+    """Seed used/total capacity only inside the genuine first-run path.
+
+    The first-run full SMART check has already deliberately woken the drives,
+    so touching mounted filesystems here cannot be the event that wakes them.
+    This function bypasses the normal no-wake capacity gate locally and does
+    not replace or modify the normal monitoring policy.
+    """
 
     disk_list = await asyncio.to_thread(
         main.get_disks
     )
 
-    # The full SMART worker deliberately woke HDDs. Refresh the explicit awake
-    # hold so statvfs can seed the capacity cache immediately after the check.
-    now = time.time()
+    mountinfo_map = await asyncio.to_thread(
+        main.get_host_mountinfo_map
+    )
+
+    seen_filesystems = set()
 
     for disk in disk_list:
-        if (
-            (disk.get("type") or "UNKNOWN")
-            in ("HDD", "UNKNOWN")
-        ):
-            device = disk.get("device")
-            if device:
-                main.manual_awake_until[
-                    device
-                ] = now + 120
+        mountpoints = (
+            disk.get("mountpoints")
+            if isinstance(disk, dict)
+            else None
+        ) or []
 
+        for mountpoint in mountpoints:
+            if not mountpoint:
+                continue
+
+            filesystem_key = (
+                main.get_filesystem_identity(
+                    mountpoint,
+                    mountinfo_map
+                )
+            )
+
+            if filesystem_key in seen_filesystems:
+                continue
+
+            seen_filesystems.add(
+                filesystem_key
+            )
+
+            await asyncio.to_thread(
+                main.get_filesystem_usage_for_mount,
+                mountpoint,
+                [disk],
+                filesystem_key,
+                True
+            )
+
+    # Re-run the normal summarizer. The values just seeded above are now fresh
+    # cache entries, so this does not need to bypass the normal no-wake gate.
     return await asyncio.to_thread(
         main.get_storage_usage_summary,
         disk_list
@@ -220,18 +194,11 @@ async def seed_first_run_storage_usage():
 
 
 async def run_startup_smart_check_with_first_install():
-    """Run one full SMART check on a fresh installation.
+    """Run one full SMART check only on a genuinely fresh installation.
 
-    The first installation check intentionally uses the same full-check state
-    machinery as the manual SMART CHECK. This means the header status and the
-    per-drive result list are populated automatically after the first run.
-
-    While those drives are deliberately awake, Disk Monitor also seeds the
-    filesystem usage cache so "used" capacity is available immediately in the
-    summary and individual drive cards.
-
-    Sleeping HDDs may be woken for this one-time initialization. Ordinary
-    application restarts continue to use the original no-wake startup policy.
+    A fresh persistent cache triggers exactly one wake-all initialization pass.
+    Every later container/application start delegates to main.py's original
+    no-wake startup SMART logic.
     """
 
     first_install = (
@@ -239,28 +206,16 @@ async def run_startup_smart_check_with_first_install():
         and not FIRST_START_SMART_CHECK_FILE.exists()
     )
 
-    # Migration for 0.22.15: that version wrote the first-start marker and
-    # refreshed SMART data, but did not populate the persistent full-check
-    # state used by the SMART CHECK button/dialog. Run the corrected check once
-    # when such a marker exists without a saved full-check result.
-    legacy_first_start_without_full_state = (
-        FIRST_START_SMART_CHECK_FILE.exists()
-        and not main.SMART_FULL_CHECK_STATE_FILE.exists()
-    )
-
-    if not (
-        first_install
-        or legacy_first_start_without_full_state
-    ):
+    if not first_install:
         await _original_startup_smart_check()
         return
 
     # Give /dev and sysfs a short moment to settle after container startup.
     await asyncio.sleep(3)
 
-    # Use the same worker as the manual SMART CHECK. It intentionally wakes
-    # mechanical HDDs, stores per-drive success/error results, updates the
-    # global header status, and persists smart_full_check_state.json.
+    # Reuse the full-check worker so the initial result is identical to a
+    # manual SMART CHECK: sleeping HDDs may be woken, results are persisted,
+    # and the header/per-drive check state is populated.
     await asyncio.to_thread(
         main.smart_full_check_worker
     )
@@ -354,13 +309,13 @@ async def run_startup_smart_check_with_first_install():
         )
     except Exception:
         # The full-check state itself has already been persisted by main.py.
-        # Failure to update the compatibility marker must not break startup.
+        # Failure to update the first-run marker must not break startup.
         pass
 
 
-# startup_event() in main.py resolves this global at runtime, so replacing the
-# function here changes only the startup SMART policy without duplicating any
-# FastAPI routes or background monitors.
+# startup_event() in main.py resolves this global at runtime. Replacing this
+# one startup function changes only first-install startup policy; the scheduled
+# SMART automation, history monitor and manual endpoints remain in main.py.
 main.run_startup_smart_check = (
     run_startup_smart_check_with_first_install
 )
