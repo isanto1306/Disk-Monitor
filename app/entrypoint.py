@@ -5,12 +5,14 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from fastapi.responses import HTMLResponse
+
 import main
 
 
 # Runtime backend version for this image. The main module remains the core
 # implementation; this entrypoint adds installation-specific startup policy.
-main.app.version = "0.22.17"
+main.app.version = "0.22.18"
 app = main.app
 
 
@@ -31,6 +33,101 @@ except Exception:
     CACHE_WAS_EMPTY_AT_PROCESS_START = False
 
 _original_startup_smart_check = main.run_startup_smart_check
+
+
+# The static frontend currently requests the SMART full-check state once when
+# the app becomes visible and then polls only for checks started manually from
+# the dialog. A first-run check can therefore complete while an already-open
+# browser still shows the old grey header state until F5. Inject a tiny status
+# synchronizer into the root HTML response. It changes no layout or styling and
+# can be removed once the same polling is folded into static/index.html.
+SMART_STATUS_SYNC_SCRIPT = r"""
+<script id="disk-monitor-smart-status-sync">
+(() => {
+    const syncSmartFullCheckStatus = async () => {
+        if (document.hidden) {
+            return;
+        }
+
+        try {
+            const response = await fetch(
+                "/api/smart/full-check",
+                { cache: "no-store" }
+            );
+
+            if (!response.ok) {
+                return;
+            }
+
+            const checkState = await response.json();
+
+            if (
+                typeof window.applySmartFullCheckState
+                === "function"
+            ) {
+                window.applySmartFullCheckState(
+                    checkState
+                );
+            }
+        }
+        catch (_) {
+            // Container restarts can temporarily make the API unavailable.
+            // The next interval retries automatically.
+        }
+    };
+
+    syncSmartFullCheckStatus();
+    window.setInterval(
+        syncSmartFullCheckStatus,
+        2000
+    );
+})();
+</script>
+"""
+
+try:
+    _index_html = (
+        main.STATIC_DIR / "index.html"
+    ).read_text(
+        encoding="utf-8"
+    )
+
+    if (
+        "disk-monitor-smart-status-sync"
+        not in _index_html
+    ):
+        _index_html = _index_html.replace(
+            "</body>",
+            SMART_STATUS_SYNC_SCRIPT
+            + "\n</body>",
+            1
+        )
+except Exception:
+    _index_html = None
+
+
+@app.middleware("http")
+async def serve_root_with_smart_status_sync(
+    request,
+    call_next
+):
+    """Keep the SMART header/result state live across backend restarts."""
+
+    if (
+        request.method == "GET"
+        and request.url.path == "/"
+        and _index_html is not None
+    ):
+        return HTMLResponse(
+            content=_index_html,
+            headers={
+                "Cache-Control": "no-store"
+            }
+        )
+
+    return await call_next(
+        request
+    )
 
 
 def can_refresh_filesystem_usage_after_explicit_wake(
