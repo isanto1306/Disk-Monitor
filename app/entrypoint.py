@@ -378,8 +378,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             );
         }
         catch (_) {
-            # A container restart can make the API temporarily unavailable.
-            pass
+            // A container restart can make the API temporarily unavailable.
         }
     };
 
