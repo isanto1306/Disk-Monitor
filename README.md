@@ -6,7 +6,7 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 
 ## Current development versions
 
-- Backend: `0.22.14`
+- Backend: `0.22.15`
 - Frontend: `0.32.77`
 
 ## Docker image
@@ -25,9 +25,9 @@ ghcr.io/isanto1306/disk-monitor:latest
 - SMART health, temperature and detailed SMART attributes
 - SMART history
 - Manual SMART refresh and full SMART check
+- One-time first-install SMART refresh across all detected drives
 - Automatic SMART refresh: Off, 1×, 2× or 3× daily
-- Automatic SMART checks avoid waking sleeping HDDs
-- Startup SMART check without intentionally waking sleeping HDDs
+- Normal automatic SMART checks avoid waking sleeping HDDs
 - RAID detection, RAID member overview and SMART integration
 - RAID standby controls with safety checks
 - ZimaOS standby-timer integration where available
@@ -43,7 +43,7 @@ For `3× daily`, the day is split into these windows:
 - `08:00–16:00`
 - `16:00–24:00`
 
-A mechanical HDD is not woken just to run the automatic SMART refresh. When a drive is confirmed awake in an open time window, Disk Monitor waits about 45 seconds and refreshes SMART if the drive is still awake.
+After the initial installation check has been completed, the normal automatic SMART refresh follows the no-wake rule: a mechanical HDD is not woken just to run a scheduled SMART refresh. When a drive is confirmed awake in an open time window, Disk Monitor waits about 45 seconds and refreshes SMART if the drive is still awake.
 
 Manual SMART actions are separate and may intentionally wake a sleeping disk.
 
@@ -98,15 +98,19 @@ http://<ZIMAOS-HOST>:8999
 
 ## First start / important setup
 
-### Startup SMART check
+### Initial SMART check on a fresh installation
 
-When Disk Monitor starts, it automatically performs one startup SMART refresh for drives that can be checked safely without intentionally waking a sleeping mechanical HDD.
+On the first start of a **fresh installation**, Disk Monitor performs one initial SMART refresh across all detected physical drives.
 
-- SSD/flash storage and confirmed-awake HDDs can be refreshed at startup.
-- A sleeping mechanical HDD is left asleep.
-- Manual SMART actions remain separate and may intentionally wake a drive.
+This first check is intentionally different from normal monitoring:
 
-This gives Disk Monitor an initial SMART data set as soon as safely possible after startup.
+- Sleeping mechanical HDDs may be woken so the initial SMART data can be collected.
+- SATA/SAS HDDs, supported USB HDDs, SSDs and NVMe drives are included when detected and supported by the controller/bridge.
+- The check is attempted once for every detected physical drive.
+- A persistent marker is stored in the Disk Monitor cache after the initial pass, so ordinary container restarts do **not** wake all HDDs again.
+- If a controller or USB bridge does not support SMART correctly, the check for that device can fail even though the drive itself is otherwise usable.
+
+After this one-time installation check, Disk Monitor returns to its normal no-wake behavior for automatic monitoring and scheduled SMART refreshes.
 
 ### USB HDD standby time
 
@@ -118,7 +122,7 @@ Important:
 
 - This value is used only for passive standby estimation inside Disk Monitor.
 - Disk Monitor does **not** change the USB enclosure's real standby timer with this setting.
-- Disk Monitor does not intentionally wake a sleeping USB HDD just to verify the estimate.
+- Disk Monitor does not intentionally wake a sleeping USB HDD just to verify the estimate during normal monitoring.
 - If the configured time does not match the enclosure's actual behavior, the displayed estimated standby state may be inaccurate.
 
 ## Update during development
@@ -141,7 +145,7 @@ docker build -t disk-monitor-local .
 
 ## Important standby rule
 
-Normal monitoring must not wake a sleeping mechanical HDD merely to collect monitoring or SMART data. Explicit manual actions are the exception.
+Normal monitoring must not wake a sleeping mechanical HDD merely to collect monitoring or SMART data. The deliberate exceptions are explicit manual actions and the one-time initial SMART refresh on a fresh installation.
 
 USB bridge behavior varies significantly by enclosure/controller. A state reported as estimated standby is not always equivalent to a directly queryable SATA/SAS standby state.
 
