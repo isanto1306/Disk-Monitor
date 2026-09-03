@@ -6,7 +6,7 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 
 ## Current development versions
 
-- Backend: `0.22.19`
+- Backend: `0.22.20`
 - Frontend: `0.32.77`
 
 ## Docker image

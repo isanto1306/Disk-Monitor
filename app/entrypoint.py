@@ -11,7 +11,7 @@ import main
 
 # Runtime backend version for this image. The main module remains the core
 # implementation; this entrypoint adds installation-specific startup policy.
-main.app.version = "0.22.19"
+main.app.version = "0.22.20"
 app = main.app
 
 
@@ -32,17 +32,28 @@ except Exception:
     CACHE_WAS_EMPTY_AT_PROCESS_START = False
 
 _original_startup_smart_check = main.run_startup_smart_check
+_original_update_process_access = main.update_process_access
 
 
 # Runtime-only frontend additions:
 # - keep the first-run SMART status live without F5;
-# - reserve enough space for the maximum three-entry Current Access preview in
-#   Comfortable layout so transient SMART I/O cannot resize closed disk cards.
+# - reserve enough space for the maximum Current Access preview in Comfortable
+#   layout;
+# - reserve footer space for dynamic USB power/standby and SMART helper text so
+#   those state changes cannot resize closed disk cards.
 # No header/menu geometry or styling is changed.
 ROOT_HTML_RUNTIME_PATCH = r"""
 <style id="disk-monitor-current-access-stable-height">
 .disk-card:not(.compact) .disk-current-access {
     min-height: 180px !important;
+}
+
+.disk-card:not(.compact) .footer-section {
+    min-height: 105px !important;
+}
+
+.disk-card.compact .footer-section:first-child {
+    min-height: 90px !important;
 }
 </style>
 <script id="disk-monitor-smart-status-sync">
@@ -131,6 +142,94 @@ async def serve_root_with_runtime_frontend_patch(
     return await call_next(
         request
     )
+
+
+def update_process_access_without_full_check_smartctl():
+    """Hide Disk Monitor's own smartctl I/O during a full SMART check.
+
+    The process-access tracker intentionally sees raw /dev file descriptors.
+    During a full SMART check that can make the smartctl subprocess look like
+    user/application disk activity and temporarily grow Current Access rows.
+    Remove only smartctl raw-device entries while the full-check worker is
+    active. Normal process attribution is otherwise untouched.
+    """
+
+    _original_update_process_access()
+
+    try:
+        if not bool(
+            main.SMART_FULL_CHECK_STATE.get(
+                "running"
+            )
+        ):
+            return
+
+        for device in list(
+            main.current_process_access.keys()
+        ):
+            bucket = main.current_process_access.get(
+                device
+            )
+
+            if not isinstance(
+                bucket,
+                dict
+            ):
+                continue
+
+            remove_keys = []
+
+            for key, entry in bucket.items():
+                if not isinstance(
+                    entry,
+                    dict
+                ):
+                    continue
+
+                process_name = str(
+                    entry.get("process")
+                    or ""
+                ).strip().lower()
+
+                target_path = str(
+                    entry.get("path")
+                    or ""
+                )
+
+                if (
+                    process_name == "smartctl"
+                    and target_path.startswith(
+                        "/dev/"
+                    )
+                ):
+                    remove_keys.append(
+                        key
+                    )
+
+            for key in remove_keys:
+                bucket.pop(
+                    key,
+                    None
+                )
+
+            if not bucket:
+                main.current_process_access.pop(
+                    device,
+                    None
+                )
+
+    except Exception:
+        # Process attribution is diagnostic only and must never interfere with
+        # the disk monitor loop or the SMART check itself.
+        pass
+
+
+# monitor_disks() resolves update_process_access from main's globals at runtime.
+# Replacing this function therefore filters only the diagnostic access list;
+# it does not change disk activity counters, SMART, power state or standby.
+main.update_process_access = (
+    update_process_access_without_full_check_smartctl
+)
 
 
 async def seed_first_run_storage_usage():
