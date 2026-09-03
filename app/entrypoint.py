@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 import main
 
 
-main.app.version = "0.22.31"
+main.app.version = "0.22.32"
 app = main.app
 
 FIRST_START_SMART_CHECK_FILE = Path(
@@ -29,18 +29,13 @@ _original_startup_smart_check = main.run_startup_smart_check
 _original_update_process_access = main.update_process_access
 
 
-# Keep the effective page width stable from the first layout pass. The former
-# runtime scrollbar observer reacted only after the browser had already reduced
-# the layout width, which made the sticky header visibly move once and then
-# move back. 100vw is equivalent to the former final compensated width but is
-# available before the first render. Header/menu geometry itself is untouched.
-ROOT_HTML_STABLE_SCROLLBAR_STYLE = r"""
-<style id="disk-monitor-stable-scrollbar-layout">
-html {
-    overflow-x: clip;
-}
-
-body {
+# Keep the sticky top bar on the physical viewport width from the first
+# visible frame. The dashboard body itself continues to use the proven
+# 0.22.29 runtime compensation below, so card widths and centering stay
+# unchanged when the browser scrollbar appears.
+ROOT_HTML_HEADER_SCROLLBAR_STYLE = r"""
+<style id="disk-monitor-header-scrollbar-stable">
+header {
     width: 100vw;
 }
 </style>
@@ -49,13 +44,15 @@ body {
 
 # Runtime-only frontend additions:
 # - keep first-run SMART status live without F5;
+# - when the browser scrollbar appears, keep the dashboard's effective layout
+#   width unchanged instead of shifting only the disk grid or reserving a
+#   permanent scrollbar gutter;
 # - once the closed-card height has settled after the first render, keep that
 #   exact height for the rest of the current layout session. SMART/USB/power
 #   state changes must not make the grid move;
-# - only a genuine browser viewport-size change may establish a new card-height
-#   baseline. A vertical scrollbar appearing/disappearing is not treated as a
-#   user resize.
-# No header/menu geometry is changed.
+# - scrollbar appearance/disappearance alone is not treated as a genuine
+#   browser viewport resize for the card-height baseline.
+# Header/menu height, spacing, lines and menu geometry are unchanged.
 ROOT_HTML_RUNTIME_PATCH = r"""
 <script id="disk-monitor-smart-status-sync">
 (() => {
@@ -71,8 +68,22 @@ ROOT_HTML_RUNTIME_PATCH = r"""
     let resizeTimer = null;
     let observedGrid = null;
     let gridStyleObserver = null;
+    let scrollbarViewportResizeObserver = null;
+    let scrollbarCompensationFrame = null;
+    let lastScrollbarWidth = null;
     let lastViewportWidth = window.innerWidth;
     let lastViewportHeight = window.innerHeight;
+
+    const originalBodyInlineWidth = (
+        document.body
+            ? document.body.style.getPropertyValue("width")
+            : ""
+    );
+    const originalRootInlineOverflowX = (
+        document.documentElement.style.getPropertyValue(
+            "overflow-x"
+        )
+    );
 
     const getDiskGrid = () => (
         document.getElementById("diskGrid")
@@ -93,6 +104,115 @@ ROOT_HTML_RUNTIME_PATCH = r"""
         return firstCard
             ? firstCard.classList.contains("compact")
             : null;
+    };
+
+    const restoreOriginalScrollbarLayout = () => {
+        if (document.body) {
+            if (originalBodyInlineWidth) {
+                document.body.style.setProperty(
+                    "width",
+                    originalBodyInlineWidth
+                );
+            }
+            else {
+                document.body.style.removeProperty(
+                    "width"
+                );
+            }
+        }
+
+        if (originalRootInlineOverflowX) {
+            document.documentElement.style.setProperty(
+                "overflow-x",
+                originalRootInlineOverflowX
+            );
+        }
+        else {
+            document.documentElement.style.removeProperty(
+                "overflow-x"
+            );
+        }
+    };
+
+    const syncScrollbarLayoutWidth = () => {
+        if (!document.body) {
+            return;
+        }
+
+        const scrollbarWidth = Math.max(
+            0,
+            window.innerWidth
+            - document.documentElement.clientWidth
+        );
+
+        if (
+            lastScrollbarWidth !== null
+            && Math.abs(
+                scrollbarWidth
+                - lastScrollbarWidth
+            ) < 0.01
+        ) {
+            return;
+        }
+
+        lastScrollbarWidth = scrollbarWidth;
+
+        const grid = getDiskGrid();
+        if (grid) {
+            grid.style.removeProperty(
+                "transform"
+            );
+        }
+
+        if (scrollbarWidth > 0) {
+            document.body.style.setProperty(
+                "width",
+                "calc(100% + "
+                + scrollbarWidth
+                + "px)"
+            );
+            document.documentElement.style.setProperty(
+                "overflow-x",
+                "clip"
+            );
+        }
+        else {
+            restoreOriginalScrollbarLayout();
+        }
+    };
+
+    const scheduleScrollbarLayoutWidth = () => {
+        if (scrollbarCompensationFrame !== null) {
+            return;
+        }
+
+        scrollbarCompensationFrame = (
+            window.requestAnimationFrame(
+                () => {
+                    scrollbarCompensationFrame = null;
+                    syncScrollbarLayoutWidth();
+                }
+            )
+        );
+    };
+
+    const ensureScrollbarCompensationObserver = () => {
+        if (
+            typeof ResizeObserver !== "function"
+            || scrollbarViewportResizeObserver
+        ) {
+            return;
+        }
+
+        scrollbarViewportResizeObserver = (
+            new ResizeObserver(
+                scheduleScrollbarLayoutWidth
+            )
+        );
+
+        scrollbarViewportResizeObserver.observe(
+            document.documentElement
+        );
     };
 
     const readEqualHeight = grid => {
@@ -165,6 +285,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
 
     const captureBaseline = () => {
         ensureGridStyleObserver();
+        ensureScrollbarCompensationObserver();
 
         const grid = getDiskGrid();
         const cards = getClosedCards(grid);
@@ -197,6 +318,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
         applyLockedHeight(
             grid
         );
+        scheduleScrollbarLayoutWidth();
     };
 
     const scheduleBaselineCapture = () => {
@@ -246,6 +368,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
                 applyLockedHeight(
                     grid
                 );
+                scheduleScrollbarLayoutWidth();
                 return;
             }
 
@@ -254,14 +377,17 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             );
 
             scheduleBaselineCapture();
+            scheduleScrollbarLayoutWidth();
         };
     }
 
     const maintainLockedHeight = () => {
         ensureGridStyleObserver();
+        ensureScrollbarCompensationObserver();
 
         const grid = getDiskGrid();
         if (!grid) {
+            scheduleScrollbarLayoutWidth();
             return;
         }
 
@@ -276,6 +402,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             && compactMode !== lockedCompactMode
         ) {
             resetBaseline();
+            scheduleScrollbarLayoutWidth();
             return;
         }
 
@@ -283,12 +410,15 @@ ROOT_HTML_RUNTIME_PATCH = r"""
             applyLockedHeight(
                 grid
             );
+            scheduleScrollbarLayoutWidth();
             return;
         }
 
         if (getClosedCards(grid).length) {
             scheduleBaselineCapture();
         }
+
+        scheduleScrollbarLayoutWidth();
     };
 
     window.addEventListener(
@@ -305,6 +435,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
                     viewportHeight - lastViewportHeight
                 ) < 1
             ) {
+                scheduleScrollbarLayoutWidth();
                 return;
             }
 
@@ -321,6 +452,8 @@ ROOT_HTML_RUNTIME_PATCH = r"""
                 () => {
                     resizeTimer = null;
                     resetBaseline();
+                    lastScrollbarWidth = null;
+                    scheduleScrollbarLayoutWidth();
                 },
                 250
             );
@@ -328,6 +461,7 @@ ROOT_HTML_RUNTIME_PATCH = r"""
     );
 
     maintainLockedHeight();
+    scheduleScrollbarLayoutWidth();
     window.setInterval(
         maintainLockedHeight,
         250
@@ -399,12 +533,12 @@ try:
     )
 
     if (
-        "disk-monitor-stable-scrollbar-layout"
+        "disk-monitor-header-scrollbar-stable"
         not in _index_html
     ):
         _index_html = _index_html.replace(
             "</head>",
-            ROOT_HTML_STABLE_SCROLLBAR_STYLE
+            ROOT_HTML_HEADER_SCROLLBAR_STYLE
             + "\n</head>",
             1
         )
