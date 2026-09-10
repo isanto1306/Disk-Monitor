@@ -157,4 +157,4 @@ For mechanical USB HDDs, configure Disk Monitor's expected USB auto-standby time
 
 ## License
 
-No license is included yet. Until a license is added, normal copyright rules apply; the repository being public does not automatically grant reuse, modification or redistribution rights.
+Disk Monitor is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for the full license text.
