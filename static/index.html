@@ -11559,6 +11559,43 @@
         }
 
 </style>
+<style id="dm-page-scrollbar-v03278">
+html,body { scrollbar-width:none !important; -ms-overflow-style:none !important; scrollbar-gutter:auto !important; }
+html::-webkit-scrollbar,body::-webkit-scrollbar { width:0 !important; height:0 !important; display:none !important; }
+#umPageScrollbarV21{
+    position:fixed;
+    top:var(--header-height, 82px);
+    right:1px;
+    bottom:0;
+    width:7px;
+    z-index:1100;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity .12s ease;
+}
+#umPageScrollbarV21.visible{
+    opacity:1;
+    pointer-events:auto;
+}
+#umPageScrollbarThumbV21{
+    position:absolute;
+    top:0;
+    right:0;
+    width:5px;
+    min-height:34px;
+    border-radius:999px;
+    background:rgba(94,124,151,.62);
+    cursor:pointer;
+    touch-action:none;
+    user-select:none;
+}
+#umPageScrollbarThumbV21:hover{
+    background:rgba(111,147,178,.76);
+}
+
+
+html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-locked #umPageScrollbarV21 { opacity:0 !important; pointer-events:none !important; }
+</style>
 </head>
 
 <body>
@@ -12293,7 +12330,7 @@
             class="system-info-value"
             id="systemInfoVersion"
         >
-            v0.32.77
+            v0.32.78
         </div>
 
     </div>
@@ -12780,7 +12817,7 @@
     // --------------------------------------------
 
     const DISK_MONITOR_VERSION =
-        "v0.32.77";
+        "v0.32.78";
 
 
     // --------------------------------------------
@@ -30383,5 +30420,130 @@ document.getElementById(
 
 </script>
 
+<div id="umPageScrollbarV21" aria-hidden="true"><div id="umPageScrollbarThumbV21"></div></div>
+<script>
+const umPageScrollbarV21={
+  track:null,
+  thumb:null,
+  dragging:false,
+  startY:0,
+  startScrollTop:0,
+  raf:0
+};
+
+function umPageScrollElementV21(){
+  return document.scrollingElement||document.documentElement;
+}
+
+function umUpdatePageScrollbarV21(){
+  const track=umPageScrollbarV21.track;
+  const thumb=umPageScrollbarV21.thumb;
+  const scroller=umPageScrollElementV21();
+  if(!track||!thumb||!scroller)return;
+
+  const viewport=Math.max(1,window.innerHeight||document.documentElement.clientHeight||1);
+  const total=Math.max(viewport,scroller.scrollHeight||viewport);
+  const maxScroll=Math.max(0,total-viewport);
+
+  if(maxScroll<=1||document.documentElement.classList.contains('dm-background-scroll-locked')){
+    track.classList.remove('visible');
+    return;
+  }
+
+  const trackHeight=Math.max(1,track.clientHeight);
+  const thumbHeight=Math.max(34,Math.min(trackHeight,trackHeight*(viewport/total)));
+  const maxThumbTop=Math.max(0,trackHeight-thumbHeight);
+  const scrollTop=Math.max(0,Math.min(maxScroll,scroller.scrollTop||window.scrollY||0));
+  const thumbTop=maxScroll>0?(scrollTop/maxScroll)*maxThumbTop:0;
+
+  thumb.style.height=`${thumbHeight}px`;
+  thumb.style.transform=`translateY(${thumbTop}px)`;
+  track.classList.add('visible');
+}
+
+function umSchedulePageScrollbarV21(){
+  if(umPageScrollbarV21.raf)cancelAnimationFrame(umPageScrollbarV21.raf);
+  umPageScrollbarV21.raf=requestAnimationFrame(()=>{
+    umPageScrollbarV21.raf=0;
+    umUpdatePageScrollbarV21();
+  });
+}
+
+function umInstallPageScrollbarV21(){
+  const track=document.getElementById('umPageScrollbarV21');
+  const thumb=document.getElementById('umPageScrollbarThumbV21');
+  if(!track||!thumb)return;
+
+  umPageScrollbarV21.track=track;
+  umPageScrollbarV21.thumb=thumb;
+
+  window.addEventListener('scroll',umSchedulePageScrollbarV21,{passive:true});
+  window.addEventListener('resize',umSchedulePageScrollbarV21,{passive:true});
+  window.addEventListener('orientationchange',umSchedulePageScrollbarV21,{passive:true});
+
+  const root=document.getElementById('app')||document.body;
+  if(root&&typeof MutationObserver!=='undefined'){
+    const observer=new MutationObserver(umSchedulePageScrollbarV21);
+    observer.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','style']});
+  }
+
+  thumb.addEventListener('pointerdown',event=>{
+    if(event.button!==undefined&&event.button!==0)return;
+    const scroller=umPageScrollElementV21();
+    umPageScrollbarV21.dragging=true;
+    umPageScrollbarV21.startY=event.clientY;
+    umPageScrollbarV21.startScrollTop=scroller.scrollTop||window.scrollY||0;
+    try{thumb.setPointerCapture(event.pointerId);}catch(_){}
+    event.preventDefault();
+  });
+
+  thumb.addEventListener('pointermove',event=>{
+    if(!umPageScrollbarV21.dragging)return;
+    const scroller=umPageScrollElementV21();
+    const viewport=Math.max(1,window.innerHeight||document.documentElement.clientHeight||1);
+    const total=Math.max(viewport,scroller.scrollHeight||viewport);
+    const maxScroll=Math.max(0,total-viewport);
+    const trackHeight=Math.max(1,track.clientHeight);
+    const thumbHeight=Math.max(34,Math.min(trackHeight,trackHeight*(viewport/total)));
+    const maxThumbTop=Math.max(1,trackHeight-thumbHeight);
+    const deltaY=event.clientY-umPageScrollbarV21.startY;
+    const deltaScroll=(deltaY/maxThumbTop)*maxScroll;
+    scroller.scrollTop=Math.max(0,Math.min(maxScroll,umPageScrollbarV21.startScrollTop+deltaScroll));
+    event.preventDefault();
+  });
+
+  const stopDrag=event=>{
+    if(!umPageScrollbarV21.dragging)return;
+    umPageScrollbarV21.dragging=false;
+    try{thumb.releasePointerCapture(event.pointerId);}catch(_){}
+  };
+  thumb.addEventListener('pointerup',stopDrag);
+  thumb.addEventListener('pointercancel',stopDrag);
+
+  track.addEventListener('pointerdown',event=>{
+    if(event.target===thumb)return;
+    const scroller=umPageScrollElementV21();
+    const viewport=Math.max(1,window.innerHeight||document.documentElement.clientHeight||1);
+    const total=Math.max(viewport,scroller.scrollHeight||viewport);
+    const maxScroll=Math.max(0,total-viewport);
+    if(maxScroll<=0)return;
+
+    const rect=track.getBoundingClientRect();
+    const ratio=Math.max(0,Math.min(1,(event.clientY-rect.top)/Math.max(1,rect.height)));
+    scroller.scrollTop=ratio*maxScroll;
+    event.preventDefault();
+  });
+
+  if(typeof ResizeObserver!=='undefined'){
+    const header=document.querySelector('#app > header');
+    if(header)new ResizeObserver(umSchedulePageScrollbarV21).observe(header);
+  }
+  if(typeof MutationObserver!=='undefined'){
+    new MutationObserver(umSchedulePageScrollbarV21).observe(document.documentElement,{attributes:true,attributeFilter:['class','style']});
+  }
+  umSchedulePageScrollbarV21();
+}
+umInstallPageScrollbarV21();
+</script>
 </body>
 </html>
