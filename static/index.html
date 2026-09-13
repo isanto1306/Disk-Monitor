@@ -12330,7 +12330,7 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
             class="system-info-value"
             id="systemInfoVersion"
         >
-            v0.32.78
+            v0.32.79
         </div>
 
     </div>
@@ -12817,7 +12817,7 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
     // --------------------------------------------
 
     const DISK_MONITOR_VERSION =
-        "v0.32.78";
+        "v0.32.79";
 
 
     // --------------------------------------------
@@ -13143,7 +13143,44 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
                         ]
                     );
 
+                    const backendStandbySince = (
+                        disk.standby_since
+                        || (
+                            disk.power_state
+                            && disk.power_state.standby_since
+                        )
+                        || ""
+                    );
+
+                    const backendTimestamp =
+                        backendStandbySince
+                            ? Date.parse(
+                                backendStandbySince
+                             )
+                            : Number.NaN;
+
                     if (
+                        Number.isFinite(
+                            backendTimestamp
+                        )
+                        && backendTimestamp > 0
+                    ) {
+
+                        if (
+                            existingTimestamp
+                            !== backendTimestamp
+                        ) {
+
+                            state.standbySinceByDisk[
+                                key
+                            ] = backendTimestamp;
+
+                            changed = true;
+
+                        }
+
+                    }
+                    else if (
                         !Number.isFinite(existingTimestamp)
                         || existingTimestamp <= 0
                     ) {
