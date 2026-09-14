@@ -11931,6 +11931,12 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
                         </div>
                         <div class="summary-dropdown-value" id="usedCapacity">-</div>
                     </div>
+                    <div class="summary-dropdown-row">
+                        <div class="summary-dropdown-label" id="freeCapacityLabel">
+                            Free
+                        </div>
+                        <div class="summary-dropdown-value" id="freeCapacity">-</div>
+                    </div>
                 </div>
             </div>
 
@@ -12381,7 +12387,7 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
             class="system-info-value"
             id="systemInfoVersion"
         >
-            v0.32.82
+            v0.32.83
         </div>
 
     </div>
@@ -12867,7 +12873,7 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
     // --------------------------------------------
 
     const DISK_MONITOR_VERSION =
-        "v0.32.82";
+        "v0.32.83";
 
 
     // --------------------------------------------
@@ -14096,6 +14102,9 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
             usedCapacity:
                 "Belegt",
 
+            freeCapacity:
+                "Frei",
+
             summaryShowDetails:
                 "Details anzeigen",
 
@@ -15016,6 +15025,9 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
 
             usedCapacity:
                 "Used",
+
+            freeCapacity:
+                "Free",
 
             summaryShowDetails:
                 "Show details",
@@ -23262,8 +23274,35 @@ const hitPoints = pointPositions.map(
     }
 
 
+    function hasLiveRefreshHoveredControl(
+        root
+    ) {
+
+        if (!root) {
+            return false;
+        }
+
+        if (
+            window.matchMedia
+            && !window.matchMedia(
+                "(hover: hover)"
+            ).matches
+        ) {
+            return false;
+        }
+
+        return Boolean(
+            root.querySelector(
+                "button:hover, [role=\"button\"]:hover, a:hover"
+            )
+        );
+
+    }
+
+
     function renderDisks(
-        disks
+        disks,
+        preserveHoveredControls = false
     ) {
 
         const pageScrollX = (
@@ -23281,6 +23320,22 @@ const hitPoints = pointPositions.map(
         const grid = document.getElementById(
             "diskGrid"
         );
+
+        /*
+         * v0.32.83 — live refresh hover stability.
+         * Automatic 1-second refreshes used to replace a hovered USB/disk
+         * control and briefly drop its blue :hover state. Keep that exact DOM
+         * in place while the pointer is on an interactive control. Manual
+         * renders (clicks/layout/sort) still render immediately.
+         */
+        if (
+            preserveHoveredControls
+            && hasLiveRefreshHoveredControl(
+                grid
+            )
+        ) {
+            return;
+        }
 
         grid.innerHTML = "";
 
@@ -24324,25 +24379,40 @@ const hitPoints = pointPositions.map(
 
     function renderUsedCapacity() {
 
-        const label =
+        const usedLabel =
             document.getElementById(
                 "usedCapacityLabel"
             );
 
-        const value =
+        const usedValue =
             document.getElementById(
                 "usedCapacity"
             );
 
+        const freeLabel =
+            document.getElementById(
+                "freeCapacityLabel"
+            );
+
+        const freeValue =
+            document.getElementById(
+                "freeCapacity"
+            );
+
         if (
-            !label
-            || !value
+            !usedLabel
+            || !usedValue
+            || !freeLabel
+            || !freeValue
         ) {
             return;
         }
 
-        label.textContent =
+        usedLabel.textContent =
             t("usedCapacity");
+
+        freeLabel.textContent =
+            t("freeCapacity");
 
         const usage = (
             state.storageUsage
@@ -24353,14 +24423,37 @@ const hitPoints = pointPositions.map(
             usage.used_bytes
         );
 
-        value.textContent = (
+        const filesystemTotalBytes = Number(
+            usage.filesystem_total_bytes
+        );
+
+        const hasUsed = (
             usage.available
             && Number.isFinite(
                 usedBytes
             )
-        )
+        );
+
+        const hasFree = (
+            hasUsed
+            && Number.isFinite(
+                filesystemTotalBytes
+            )
+        );
+
+        usedValue.textContent = hasUsed
             ? formatSize(
                 usedBytes
+            )
+            : "-";
+
+        freeValue.textContent = hasFree
+            ? formatSize(
+                Math.max(
+                    0,
+                    filesystemTotalBytes
+                    - usedBytes
+                )
             )
             : "-";
 
@@ -25558,7 +25651,8 @@ const hitPoints = pointPositions.map(
             renderStandbyTimer();
 
             renderDisks(
-                data.disks
+                data.disks,
+                true
             );
 
             if (
@@ -25614,6 +25708,11 @@ const hitPoints = pointPositions.map(
 
                     if (
                         !state.usbStandbyConfigDirty
+                        && !hasLiveRefreshHoveredControl(
+                            document.getElementById(
+                                "diskDetailsOverlay"
+                            )
+                        )
                     ) {
 
                         renderDiskDetails(
