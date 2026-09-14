@@ -1,0 +1,44 @@
+name: Fix Disk Monitor v0.32.81 release workflow
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/fix-release-v0.32.81.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fix workflow indentation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/release-v0.32.81.yml')
+          text = path.read_text(encoding='utf-8')
+          bad = "\n'''\n          text = text[:points_start]"
+          good = "\n          '''\n          text = text[:points_start]"
+          if bad not in text:
+              raise SystemExit('Expected indentation defect not found')
+          path.write_text(text.replace(bad, good, 1), encoding='utf-8')
+          PY
+          rm -f .github/workflows/fix-release-v0.32.81.yml
+
+      - name: Commit fix as isanto1306
+        shell: bash
+        run: |
+          git config user.name "isanto1306"
+          git config user.email "185259594+isanto1306@users.noreply.github.com"
+          git add .github/workflows/release-v0.32.81.yml .github/workflows/fix-release-v0.32.81.yml
+          git commit -m "Disk Monitor v0.32.81 – fix release workflow"
+          git push origin HEAD:main
