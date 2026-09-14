@@ -1,0 +1,254 @@
+name: Release Disk Monitor v0.32.80
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/release-v0.32.80.yml'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply frontend v0.32.80
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          index_path = Path('static/index.html')
+          text = index_path.read_text(encoding='utf-8')
+
+          old_version = 'v0.32.79'
+          new_version = 'v0.32.80'
+          old_count = text.count(old_version)
+          if old_count != 2:
+              raise SystemExit(f'Expected exactly 2 frontend version markers {old_version}, found {old_count}')
+          text = text.replace(old_version, new_version)
+
+          style_id = 'dm-settings-close-match-update-monitor-v03280'
+          if style_id not in text:
+              style_block = r'''
+          <style id="dm-settings-close-match-update-monitor-v03280">
+          /* v0.32.80 — Settings close X only.
+             Matches the Update Monitor geometric close control. */
+          .settings-header{
+              position:relative;
+              padding-right:25px;
+          }
+
+          .settings-panel-close{
+              position:absolute;
+              top:-6px;
+              right:-8px;
+              width:25px;
+              height:25px;
+              padding:0;
+              border:0;
+              border-radius:6px;
+              background:transparent;
+              box-shadow:none;
+              font-size:0;
+              line-height:0;
+              cursor:pointer;
+              color:#9baab4;
+          }
+
+          .settings-panel-close::before,
+          .settings-panel-close::after{
+              content:"";
+              position:absolute;
+              left:50%;
+              top:50%;
+              width:12px;
+              height:1.4px;
+              margin:0;
+              padding:0;
+              border:0;
+              border-radius:0;
+              background:#9baab4;
+              transform-origin:center;
+              box-shadow:none;
+          }
+
+          .settings-panel-close::before{
+              transform:translate(-50%,-50%) rotate(45deg);
+          }
+
+          .settings-panel-close::after{
+              transform:translate(-50%,-50%) rotate(-45deg);
+          }
+
+          .settings-panel-close:hover,
+          .settings-panel-close:focus-visible{
+              border:0;
+              background:rgba(55,126,204,.18);
+              box-shadow:none;
+              outline:none;
+          }
+
+          .settings-panel-close:hover::before,
+          .settings-panel-close:hover::after,
+          .settings-panel-close:focus-visible::before,
+          .settings-panel-close:focus-visible::after{
+              background:#a9d5ff;
+          }
+          </style>
+          '''
+              if '</head>' not in text:
+                  raise SystemExit('Could not find </head>')
+              text = text.replace('</head>', style_block + '\n</head>', 1)
+
+          def matching_div_end(source: str, start: int) -> int:
+              token_re = re.compile(r'<div\b[^>]*>|</div\s*>', re.I)
+              depth = 0
+              seen_first = False
+              for match in token_re.finditer(source, start):
+                  token = match.group(0).lower()
+                  if token.startswith('<div'):
+                      depth += 1
+                      seen_first = True
+                  else:
+                      depth -= 1
+                      if seen_first and depth == 0:
+                          return match.end()
+              raise RuntimeError('Could not find matching settings-header closing div')
+
+          if 'id="settingsPanelClose"' not in text:
+              header_marker = '<div class="settings-header">'
+              header_start = text.find(header_marker)
+              if header_start < 0:
+                  raise SystemExit('Could not find Settings header')
+              header_end = matching_div_end(text, header_start)
+              header_html = text[header_start:header_end]
+              closing_pos = header_html.rfind('</div>')
+              if closing_pos < 0:
+                  raise SystemExit('Could not find Settings header closing tag')
+              close_button = r'''
+
+              <button
+                  class="settings-panel-close"
+                  id="settingsPanelClose"
+                  type="button"
+                  aria-label="Close settings"
+                  title="Close"
+              ></button>
+
+          '''
+              header_html = header_html[:closing_pos] + close_button + header_html[closing_pos:]
+              text = text[:header_start] + header_html + text[header_end:]
+
+          handler_marker = '''    // --------------------------------------------
+              // SETTINGS
+              // --------------------------------------------
+
+              document.getElementById(
+                  "settingsButton"
+              ).addEventListener('''
+
+          if '"settingsPanelClose"\n              ).addEventListener' not in text:
+              if handler_marker not in text:
+                  raise SystemExit('Could not find Settings event insertion point')
+              handler = '''    // --------------------------------------------
+              // SETTINGS
+              // --------------------------------------------
+
+              document.getElementById(
+                  "settingsPanelClose"
+              ).addEventListener(
+                  "click",
+                  event => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      closeSettings();
+                  }
+              );
+
+
+              document.getElementById(
+                  "settingsButton"
+              ).addEventListener('''
+              text = text.replace(handler_marker, handler, 1)
+
+          if text.count(new_version) != 2:
+              raise SystemExit(f'Expected exactly 2 frontend version markers {new_version}, found {text.count(new_version)}')
+          if text.count('id="settingsPanelClose"') != 1:
+              raise SystemExit('Settings close button validation failed')
+          if text.count(style_id) != 1:
+              raise SystemExit('Settings close style validation failed')
+
+          index_path.write_text(text, encoding='utf-8')
+
+          readme = Path('README.md')
+          readme_text = readme.read_text(encoding='utf-8')
+          old = '- Frontend: `0.32.79`'
+          new = '- Frontend: `0.32.80`'
+          if old not in readme_text:
+              raise SystemExit('README frontend version marker not found')
+          readme.write_text(readme_text.replace(old, new, 1), encoding='utf-8')
+
+          compose = Path('docker-compose.zimaos.yml')
+          compose_text = compose.read_text(encoding='utf-8')
+          if 'version: "0.32.79"' not in compose_text:
+              raise SystemExit('ZimaOS version marker not found')
+          compose_text = compose_text.replace('version: "0.32.79"', 'version: "0.32.80"', 1)
+          compose_text = re.sub(r'update_at: "[0-9]{4}-[0-9]{2}-[0-9]{2}"', 'update_at: "2026-09-14"', compose_text, count=1)
+          compose.write_text(compose_text, encoding='utf-8')
+          PY
+
+      - name: Remove one-time release workflow
+        run: rm -f .github/workflows/release-v0.32.80.yml
+
+      - name: Validate requested scope
+        shell: bash
+        run: |
+          git diff --check
+          git diff --stat
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = ".github/workflows/release-v0.32.80.yml README.md docker-compose.zimaos.yml static/index.html "
+          grep -q 'v0.32.80' static/index.html
+          grep -q 'id="settingsPanelClose"' static/index.html
+          grep -q 'Frontend: `0.32.80`' README.md
+          grep -q 'version: "0.32.80"' docker-compose.zimaos.yml
+
+      - name: Commit v0.32.80 as isanto1306
+        shell: bash
+        run: |
+          git config user.name "isanto1306"
+          git config user.email "185259594+isanto1306@users.noreply.github.com"
+          git add static/index.html README.md docker-compose.zimaos.yml .github/workflows/release-v0.32.80.yml
+          git commit -m "Disk Monitor v0.32.80 – Add Settings close X"
+          git push origin HEAD:main
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish v0.32.80 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/disk-monitor:latest
+            ghcr.io/${{ github.repository_owner }}/disk-monitor:sha-${{ github.sha }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
