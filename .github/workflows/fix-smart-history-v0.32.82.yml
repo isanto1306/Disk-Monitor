@@ -1,0 +1,218 @@
+name: Fix SMART history v0.32.82
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/fix-smart-history-v0.32.82.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply SMART history fix only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          index = Path('static/index.html')
+          text = index.read_text(encoding='utf-8')
+
+          # Preserve the already approved v0.32.81 X layout byte-for-byte.
+          x_marker = '<style id="dm-unified-modal-close-v03281">'
+          x_start = text.find(x_marker)
+          if x_start < 0:
+              raise SystemExit('Approved X style block not found')
+          x_end = text.find('</style>', x_start)
+          if x_end < 0:
+              raise SystemExit('Approved X style block is incomplete')
+          x_end += len('</style>')
+          x_css_before = text[x_start:x_end]
+
+          # Regression cause: buildSmartHistorySvg already uses local `const t = 10`
+          # for the chart top margin. v0.32.81 then called `t(...)` for translation,
+          # so opening SMART history threw TypeError: t is not a function.
+          pattern = re.compile(
+              r'const metricLabel\s*=\s*t\(\s*'
+              r'smartHistoryMetricMeta\[metric\]\?\.\[0\]\s*\|\|\s*metric\s*'
+              r'\);'
+          )
+          replacement = '''const metricKey = smartHistoryMetricMeta[metric]?.[0] || metric;
+
+          const metricLabel = (
+              translations[state.language]?.[metricKey]
+              || metricKey
+          );'''
+          text, changed = pattern.subn(replacement, text, count=1)
+          if changed != 1:
+              raise SystemExit(f'Expected one broken SMART history translation call, found {changed}')
+
+          if 'v0.32.81' not in text:
+              raise SystemExit('Frontend v0.32.81 marker not found')
+          text = text.replace('v0.32.81', 'v0.32.82')
+
+          # The approved X block must be exactly unchanged.
+          x_start_after = text.find(x_marker)
+          x_end_after = text.find('</style>', x_start_after) + len('</style>')
+          if text[x_start_after:x_end_after] != x_css_before:
+              raise SystemExit('Approved X style changed unexpectedly')
+
+          if 'settingsPanelClose' in text or 'settings-panel-close' in text:
+              raise SystemExit('Settings X unexpectedly returned')
+          if 'const metricLabel = t(' in text:
+              raise SystemExit('Broken SMART history translation call still present')
+          if 'smart-history-hit-point' not in text or '${hitPoints}' not in text:
+              raise SystemExit('SMART history hover targets are missing')
+
+          index.write_text(text, encoding='utf-8')
+
+          readme = Path('README.md')
+          r = readme.read_text(encoding='utf-8')
+          old = '- Frontend: `0.32.81`'
+          new = '- Frontend: `0.32.82`'
+          if old not in r:
+              raise SystemExit('README frontend version marker not found')
+          readme.write_text(r.replace(old, new, 1), encoding='utf-8')
+
+          compose = Path('docker-compose.zimaos.yml')
+          c = compose.read_text(encoding='utf-8')
+          if 'version: "0.32.81"' not in c:
+              raise SystemExit('ZimaOS frontend version marker not found')
+          c = c.replace('version: "0.32.81"', 'version: "0.32.82"', 1)
+          c = re.sub(
+              r'update_at: "[0-9]{4}-[0-9]{2}-[0-9]{2}"',
+              'update_at: "2026-09-14"',
+              c,
+              count=1
+          )
+          compose.write_text(c, encoding='utf-8')
+          PY
+
+      - name: JavaScript syntax test
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path('static/index.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script([^>]*)>(.*?)</script>', text, flags=re.S | re.I)
+          if not scripts:
+              raise SystemExit('No script blocks found')
+          for i, (_, body) in enumerate(scripts):
+              Path(f'/tmp/dm-script-{i}.js').write_text(body, encoding='utf-8')
+          print(f'Extracted {len(scripts)} script blocks')
+          PY
+          for f in /tmp/dm-script-*.js; do
+            node --check "$f"
+          done
+
+      - name: SMART history runtime regression test
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          text = Path('static/index.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script([^>]*)>(.*?)</script>', text, flags=re.S | re.I)
+          main_js = max((body for _, body in scripts), key=len)
+
+          name = 'buildSmartHistorySvg'
+          start = main_js.find('function ' + name)
+          if start < 0:
+              raise SystemExit('buildSmartHistorySvg not found')
+          brace = main_js.find('{', start)
+          depth = 0
+          end = None
+          for i in range(brace, len(main_js)):
+              char = main_js[i]
+              if char == '{':
+                  depth += 1
+              elif char == '}':
+                  depth -= 1
+                  if depth == 0:
+                      end = i + 1
+                      break
+          if end is None:
+              raise SystemExit('Could not extract buildSmartHistorySvg')
+          fn = main_js[start:end]
+
+          pre = r'''
+          const state={language:"de"};
+          const translations={de:{
+            smartHistoryTemperature:"Temperatur",
+            smartHistoryPowerOn:"Betriebszeit",
+            smartHistoryPowerCycles:"Einschaltvorgänge",
+            smartHistoryPercentageUsed:"Verschleiß",
+            smartHistoryMediaErrors:"Medien-/Datenfehler"
+          }};
+          const smartHistoryMetricMeta={
+            temperature_celsius:["smartHistoryTemperature",""],
+            power_on_hours:["smartHistoryPowerOn"," h"],
+            power_cycles:["smartHistoryPowerCycles",""],
+            percentage_used:["smartHistoryPercentageUsed","%"],
+            media_errors:["smartHistoryMediaErrors",""]
+          };
+          const escapeHtml=s=>String(s).replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+          const formatTemperature=v=>`${Number(v).toFixed(0)} °C`;
+          const formatLocalizedDateTime=d=>new Intl.DateTimeFormat("de-DE",{dateStyle:"short",timeStyle:"medium",timeZone:"UTC"}).format(d);
+          function formatSmartHistoryValue(metric,value){
+            if(value===null||value===undefined||!Number.isFinite(Number(value)))return "-";
+            if(metric==="temperature_celsius")return formatTemperature(value);
+            const number=Number(value);
+            return number.toLocaleString("de-DE",{maximumFractionDigits:2})+(smartHistoryMetricMeta[metric]?.[1]||"");
+          }
+          '''
+
+          post = r'''
+          const samples=[
+            {recorded_at:"2026-09-14T06:00:00+00:00",temperature_celsius:31,power_on_hours:100,power_cycles:10,percentage_used:2,media_errors:0},
+            {recorded_at:"2026-09-14T07:00:00+00:00",temperature_celsius:39,power_on_hours:101,power_cycles:11,percentage_used:2,media_errors:0},
+            {recorded_at:"2026-09-14T08:00:00+00:00",temperature_celsius:35,power_on_hours:102,power_cycles:11,percentage_used:3,media_errors:1}
+          ];
+          for(const metric of ["temperature_celsius","power_on_hours","power_cycles","percentage_used","media_errors"]){
+            const html=buildSmartHistorySvg({samples},metric);
+            const hits=(html.match(/smart-history-hit-point/g)||[]).length;
+            if(!html.includes('smart-history-line') || hits!==3 || !html.includes('<title>')){
+              throw new Error(`SMART history failed for ${metric}: hits=${hits}`);
+            }
+            console.log(`PASS ${metric}: line + ${hits} hover samples`);
+          }
+          '''
+
+          Path('/tmp/smart-history-regression.js').write_text(pre + fn + post, encoding='utf-8')
+          PY
+          node /tmp/smart-history-regression.js
+
+      - name: Validate scope
+        shell: bash
+        run: |
+          git diff --check
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = "README.md docker-compose.zimaos.yml static/index.html "
+          grep -q 'v0.32.82' static/index.html
+          grep -q 'Frontend: `0.32.82`' README.md
+          grep -q 'version: "0.32.82"' docker-compose.zimaos.yml
+          grep -q 'dm-unified-modal-close-v03281' static/index.html
+          ! grep -q 'settingsPanelClose' static/index.html
+          ! grep -q 'settings-panel-close' static/index.html
+
+      - name: Remove one-time workflow and commit
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-smart-history-v0.32.82.yml
+          git config user.name "isanto1306"
+          git config user.email "185259594+isanto1306@users.noreply.github.com"
+          git add static/index.html README.md docker-compose.zimaos.yml .github/workflows/fix-smart-history-v0.32.82.yml
+          git commit -m "Disk Monitor v0.32.82 – Fix SMART history"
+          git push origin HEAD:main
