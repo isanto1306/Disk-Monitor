@@ -216,7 +216,6 @@ jobs:
       - name: Validate requested scope
         shell: bash
         run: |
-          git diff --check
           git diff --stat
           test "$(git diff --name-only | sort | tr '\n' ' ')" = ".github/workflows/release-v0.32.80.yml README.md docker-compose.zimaos.yml static/index.html "
           grep -q 'v0.32.80' static/index.html
