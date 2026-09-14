@@ -24,7 +24,7 @@ ghcr.io/isanto1306/disk-monitor:latest
 - Power-state / standby monitoring
 - Persistent standby-since timestamps after an observed power-state transition
 - SMART health, temperature and detailed SMART attributes
-- SMART history
+- SMART history with date, time and value hover details for available metrics
 - Manual SMART refresh and full SMART check
 - One-time first-install full SMART check across all detected drives
 - Automatic SMART refresh: Off, 1×, 2× or 3× daily
