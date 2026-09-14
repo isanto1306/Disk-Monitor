@@ -20,7 +20,7 @@ ghcr.io/isanto1306/disk-monitor:latest
 ## Features
 
 - Physical disk discovery for HDD, SSD, NVMe and supported USB storage
-- Capacity, mount points and current disk activity
+- Capacity with used/free overview, mount points and current disk activity
 - Power-state / standby monitoring
 - Persistent standby-since timestamps after an observed power-state transition
 - SMART health, temperature and detailed SMART attributes
