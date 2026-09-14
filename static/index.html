@@ -11596,6 +11596,73 @@ html::-webkit-scrollbar,body::-webkit-scrollbar { width:0 !important; height:0 !
 
 html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-locked #umPageScrollbarV21 { opacity:0 !important; pointer-events:none !important; }
 </style>
+
+<style id="dm-settings-close-match-update-monitor-v03280">
+/* v0.32.80 — Settings close X only.
+   Matches the Update Monitor geometric close control. */
+.settings-header{
+    position:relative;
+    padding-right:25px;
+}
+
+.settings-panel-close{
+    position:absolute;
+    top:-6px;
+    right:-8px;
+    width:25px;
+    height:25px;
+    padding:0;
+    border:0;
+    border-radius:6px;
+    background:transparent;
+    box-shadow:none;
+    font-size:0;
+    line-height:0;
+    cursor:pointer;
+    color:#9baab4;
+}
+
+.settings-panel-close::before,
+.settings-panel-close::after{
+    content:"";
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:12px;
+    height:1.4px;
+    margin:0;
+    padding:0;
+    border:0;
+    border-radius:0;
+    background:#9baab4;
+    transform-origin:center;
+    box-shadow:none;
+}
+
+.settings-panel-close::before{
+    transform:translate(-50%,-50%) rotate(45deg);
+}
+
+.settings-panel-close::after{
+    transform:translate(-50%,-50%) rotate(-45deg);
+}
+
+.settings-panel-close:hover,
+.settings-panel-close:focus-visible{
+    border:0;
+    background:rgba(55,126,204,.18);
+    box-shadow:none;
+    outline:none;
+}
+
+.settings-panel-close:hover::before,
+.settings-panel-close:hover::after,
+.settings-panel-close:focus-visible::before,
+.settings-panel-close:focus-visible::after{
+    background:#a9d5ff;
+}
+</style>
+
 </head>
 
 <body>
@@ -12330,7 +12397,7 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
             class="system-info-value"
             id="systemInfoVersion"
         >
-            v0.32.79
+            v0.32.80
         </div>
 
     </div>
@@ -12466,7 +12533,17 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
 
             </div>
 
-        </div>
+        
+
+    <button
+        class="settings-panel-close"
+        id="settingsPanelClose"
+        type="button"
+        aria-label="Close settings"
+        title="Close"
+    ></button>
+
+</div>
 
 
         <div class="setting">
@@ -12817,7 +12894,7 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
     // --------------------------------------------
 
     const DISK_MONITOR_VERSION =
-        "v0.32.79";
+        "v0.32.80";
 
 
     // --------------------------------------------
@@ -27931,6 +28008,18 @@ document.getElementById(
     // --------------------------------------------
     // SETTINGS
     // --------------------------------------------
+
+    document.getElementById(
+        "settingsPanelClose"
+    ).addEventListener(
+        "click",
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+            closeSettings();
+        }
+    );
+
 
     document.getElementById(
         "settingsButton"
