@@ -182,8 +182,10 @@ jobs:
               ).addEventListener('''
               text = text.replace(handler_marker, handler, 1)
 
-          if text.count(new_version) != 2:
-              raise SystemExit(f'Expected exactly 2 frontend version markers {new_version}, found {text.count(new_version)}')
+          if old_version in text:
+              raise SystemExit(f'Old frontend version marker {old_version} remains')
+          if text.count(new_version) < 2:
+              raise SystemExit(f'Expected frontend version {new_version} in visible/version markers')
           if text.count('id="settingsPanelClose"') != 1:
               raise SystemExit('Settings close button validation failed')
           if text.count(style_id) != 1:
