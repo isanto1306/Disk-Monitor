@@ -1,0 +1,422 @@
+name: Release Disk Monitor v0.32.83
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/release-v0.32.83.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply tested frontend v0.32.83
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          index = Path('static/index.html')
+          text = index.read_text(encoding='utf-8')
+
+          # The approved close-X layout must remain byte-for-byte unchanged.
+          x_marker = '<style id="dm-unified-modal-close-v03281">'
+          x_start = text.find(x_marker)
+          if x_start < 0:
+              raise SystemExit('Approved X style block not found')
+          x_end = text.find('</style>', x_start)
+          if x_end < 0:
+              raise SystemExit('Approved X style block incomplete')
+          x_end += len('</style>')
+          x_css_before = text[x_start:x_end]
+
+          if 'settingsPanelClose' in text or 'settings-panel-close' in text:
+              raise SystemExit('Settings X unexpectedly present before update')
+
+          # Capacity dropdown: keep Belegt and add Frei directly below it.
+          old_capacity = '''                    <div class="summary-dropdown-row">
+                        <div class="summary-dropdown-label" id="usedCapacityLabel">
+                            Used
+                        </div>
+                        <div class="summary-dropdown-value" id="usedCapacity">-</div>
+                    </div>'''
+          free_capacity = '''
+                    <div class="summary-dropdown-row">
+                        <div class="summary-dropdown-label" id="freeCapacityLabel">
+                            Free
+                        </div>
+                        <div class="summary-dropdown-value" id="freeCapacity">-</div>
+                    </div>'''
+          if 'id="freeCapacity"' not in text:
+              if text.count(old_capacity) != 1:
+                  raise SystemExit(f'Capacity anchor count: {text.count(old_capacity)}')
+              text = text.replace(old_capacity, old_capacity + free_capacity, 1)
+
+          # Translation labels.
+          de_anchor = '''            usedCapacity:
+                "Belegt",
+
+            summaryShowDetails:'''
+          de_replacement = '''            usedCapacity:
+                "Belegt",
+
+            freeCapacity:
+                "Frei",
+
+            summaryShowDetails:'''
+          if 'freeCapacity:\n                "Frei"' not in text:
+              if text.count(de_anchor) != 1:
+                  raise SystemExit('German capacity translation anchor missing')
+              text = text.replace(de_anchor, de_replacement, 1)
+
+          en_anchor = '''            usedCapacity:
+                "Used",
+
+            summaryShowDetails:'''
+          en_replacement = '''            usedCapacity:
+                "Used",
+
+            freeCapacity:
+                "Free",
+
+            summaryShowDetails:'''
+          if 'freeCapacity:\n                "Free"' not in text:
+              if text.count(en_anchor) != 1:
+                  raise SystemExit('English capacity translation anchor missing')
+              text = text.replace(en_anchor, en_replacement, 1)
+
+          # 1-second refresh hover stability: preserve hovered interactive DOM.
+          render_anchor = '''    function renderDisks(
+        disks
+    ) {'''
+          render_replacement = '''    function hasLiveRefreshHoveredControl(
+        root
+    ) {
+
+        if (!root) {
+            return false;
+        }
+
+        if (
+            window.matchMedia
+            && !window.matchMedia(
+                "(hover: hover)"
+            ).matches
+        ) {
+            return false;
+        }
+
+        return Boolean(
+            root.querySelector(
+                "button:hover, [role=\\"button\\"]:hover, a:hover"
+            )
+        );
+
+    }
+
+
+    function renderDisks(
+        disks,
+        preserveHoveredControls = false
+    ) {'''
+          if 'function hasLiveRefreshHoveredControl(' not in text:
+              if text.count(render_anchor) != 1:
+                  raise SystemExit('renderDisks anchor missing')
+              text = text.replace(render_anchor, render_replacement, 1)
+
+          grid_anchor = '''        const grid = document.getElementById(
+            "diskGrid"
+        );
+
+        grid.innerHTML = "";'''
+          grid_replacement = '''        const grid = document.getElementById(
+            "diskGrid"
+        );
+
+        /*
+         * v0.32.83 — live refresh hover stability.
+         * Automatic 1-second refreshes used to replace a hovered USB/disk
+         * control and briefly drop its blue :hover state. Keep that exact DOM
+         * in place while the pointer is on an interactive control. Manual
+         * renders (clicks/layout/sort) still render immediately.
+         */
+        if (
+            preserveHoveredControls
+            && hasLiveRefreshHoveredControl(
+                grid
+            )
+        ) {
+            return;
+        }
+
+        grid.innerHTML = "";'''
+          if 'v0.32.83 — live refresh hover stability.' not in text:
+              if text.count(grid_anchor) != 1:
+                  raise SystemExit('diskGrid render anchor missing')
+              text = text.replace(grid_anchor, grid_replacement, 1)
+
+          old_used_function = '''    function renderUsedCapacity() {
+
+        const label =
+            document.getElementById(
+                "usedCapacityLabel"
+            );
+
+        const value =
+            document.getElementById(
+                "usedCapacity"
+            );
+
+        if (
+            !label
+            || !value
+        ) {
+            return;
+        }
+
+        label.textContent =
+            t("usedCapacity");
+
+        const usage = (
+            state.storageUsage
+            || {}
+        );
+
+        const usedBytes = Number(
+            usage.used_bytes
+        );
+
+        value.textContent = (
+            usage.available
+            && Number.isFinite(
+                usedBytes
+            )
+        )
+            ? formatSize(
+                usedBytes
+            )
+            : "-";
+
+    }'''
+          new_used_function = '''    function renderUsedCapacity() {
+
+        const usedLabel =
+            document.getElementById(
+                "usedCapacityLabel"
+            );
+
+        const usedValue =
+            document.getElementById(
+                "usedCapacity"
+            );
+
+        const freeLabel =
+            document.getElementById(
+                "freeCapacityLabel"
+            );
+
+        const freeValue =
+            document.getElementById(
+                "freeCapacity"
+            );
+
+        if (
+            !usedLabel
+            || !usedValue
+            || !freeLabel
+            || !freeValue
+        ) {
+            return;
+        }
+
+        usedLabel.textContent =
+            t("usedCapacity");
+
+        freeLabel.textContent =
+            t("freeCapacity");
+
+        const usage = (
+            state.storageUsage
+            || {}
+        );
+
+        const usedBytes = Number(
+            usage.used_bytes
+        );
+
+        const filesystemTotalBytes = Number(
+            usage.filesystem_total_bytes
+        );
+
+        const hasUsed = (
+            usage.available
+            && Number.isFinite(
+                usedBytes
+            )
+        );
+
+        const hasFree = (
+            hasUsed
+            && Number.isFinite(
+                filesystemTotalBytes
+            )
+        );
+
+        usedValue.textContent = hasUsed
+            ? formatSize(
+                usedBytes
+            )
+            : "-";
+
+        freeValue.textContent = hasFree
+            ? formatSize(
+                Math.max(
+                    0,
+                    filesystemTotalBytes
+                    - usedBytes
+                )
+            )
+            : "-";
+
+    }'''
+          if 'const freeValue =' not in text:
+              if text.count(old_used_function) != 1:
+                  raise SystemExit('renderUsedCapacity function anchor missing')
+              text = text.replace(old_used_function, new_used_function, 1)
+
+          auto_render = '''            renderDisks(
+                data.disks
+            );'''
+          auto_render_new = '''            renderDisks(
+                data.disks,
+                true
+            );'''
+          if auto_render in text:
+              if text.count(auto_render) != 1:
+                  raise SystemExit('Unexpected automatic renderDisks call count')
+              text = text.replace(auto_render, auto_render_new, 1)
+          elif auto_render_new not in text:
+              raise SystemExit('Automatic renderDisks call missing')
+
+          details_anchor = '''                    if (
+                        !state.usbStandbyConfigDirty
+                    ) {
+
+                        renderDiskDetails('''
+          details_replacement = '''                    if (
+                        !state.usbStandbyConfigDirty
+                        && !hasLiveRefreshHoveredControl(
+                            document.getElementById(
+                                "diskDetailsOverlay"
+                            )
+                        )
+                    ) {
+
+                        renderDiskDetails('''
+          if '&& !hasLiveRefreshHoveredControl(\n                            document.getElementById(\n                                "diskDetailsOverlay"' not in text:
+              if text.count(details_anchor) != 1:
+                  raise SystemExit('Disk details live refresh anchor missing')
+              text = text.replace(details_anchor, details_replacement, 1)
+
+          # Frontend version only; approved X block id remains v03281 by design.
+          count_v82 = text.count('v0.32.82')
+          if count_v82 != 2:
+              raise SystemExit(f'Expected exactly two v0.32.82 markers, found {count_v82}')
+          text = text.replace('v0.32.82', 'v0.32.83')
+
+          # Verify X is exactly unchanged and Settings still has no X.
+          x_start_after = text.find(x_marker)
+          x_end_after = text.find('</style>', x_start_after) + len('</style>')
+          if text[x_start_after:x_end_after] != x_css_before:
+              raise SystemExit('Approved X style changed unexpectedly')
+          if 'settingsPanelClose' in text or 'settings-panel-close' in text:
+              raise SystemExit('Settings X unexpectedly returned')
+
+          # SMART history regression protection from v0.32.82.
+          required = [
+              'smart-history-hit-point',
+              '${hitPoints}',
+              'translations[state.language]?.[metricKey]',
+              'function buildSmartHistorySvg('
+          ]
+          for marker in required:
+              if marker not in text:
+                  raise SystemExit(f'SMART history marker missing: {marker}')
+
+          index.write_text(text, encoding='utf-8')
+
+          readme = Path('README.md')
+          r = readme.read_text(encoding='utf-8')
+          old = '- Frontend: `0.32.82`'
+          new = '- Frontend: `0.32.83`'
+          if old not in r:
+              raise SystemExit('README frontend version marker not found')
+          readme.write_text(r.replace(old, new, 1), encoding='utf-8')
+
+          compose = Path('docker-compose.zimaos.yml')
+          c = compose.read_text(encoding='utf-8')
+          if 'version: "0.32.82"' not in c:
+              raise SystemExit('ZimaOS frontend version marker not found')
+          c = c.replace('version: "0.32.82"', 'version: "0.32.83"', 1)
+          c = re.sub(
+              r'update_at: "[0-9]{4}-[0-9]{2}-[0-9]{2}"',
+              'update_at: "2026-09-14"',
+              c,
+              count=1
+          )
+          compose.write_text(c, encoding='utf-8')
+          PY
+
+      - name: JavaScript syntax test
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path('static/index.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script([^>]*)>(.*?)</script>', text, flags=re.S | re.I)
+          if not scripts:
+              raise SystemExit('No script blocks found')
+          for i, (_, body) in enumerate(scripts):
+              Path(f'/tmp/dm-script-{i}.js').write_text(body, encoding='utf-8')
+          print(f'Extracted {len(scripts)} script blocks')
+          PY
+          for f in /tmp/dm-script-*.js; do
+            node --check "$f"
+          done
+
+      - name: Validate tested scope
+        shell: bash
+        run: |
+          git diff --check
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = "README.md docker-compose.zimaos.yml static/index.html "
+          grep -q 'v0.32.83' static/index.html
+          grep -q 'Frontend: `0.32.83`' README.md
+          grep -q 'version: "0.32.83"' docker-compose.zimaos.yml
+          grep -q 'id="freeCapacity"' static/index.html
+          grep -q 'function hasLiveRefreshHoveredControl' static/index.html
+          grep -q 'dm-unified-modal-close-v03281' static/index.html
+          ! grep -q 'settingsPanelClose' static/index.html
+          ! grep -q 'settings-panel-close' static/index.html
+          grep -q 'smart-history-hit-point' static/index.html
+          grep -Fq 'translations[state.language]?.[metricKey]' static/index.html
+
+      - name: Remove one-time workflow and commit
+        shell: bash
+        run: |
+          rm -f .github/workflows/release-v0.32.83.yml
+          git config user.name "isanto1306"
+          git config user.email "185259594+isanto1306@users.noreply.github.com"
+          git add static/index.html README.md docker-compose.zimaos.yml .github/workflows/release-v0.32.83.yml
+          git commit -m "Disk Monitor v0.32.83 – Stabilize hover and show free capacity"
+          git push origin HEAD:main
