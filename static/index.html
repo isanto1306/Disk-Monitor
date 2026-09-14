@@ -12381,7 +12381,7 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
             class="system-info-value"
             id="systemInfoVersion"
         >
-            v0.32.81
+            v0.32.82
         </div>
 
     </div>
@@ -12867,7 +12867,7 @@ html.dm-background-scroll-locked #umPageScrollbarV21,body.dm-background-scroll-l
     // --------------------------------------------
 
     const DISK_MONITOR_VERSION =
-        "v0.32.81";
+        "v0.32.82";
 
 
     // --------------------------------------------
@@ -18973,8 +18973,11 @@ const points = pointPositions.map(
     point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`
 ).join(" ");
 
-const metricLabel = t(
-    smartHistoryMetricMeta[metric]?.[0] || metric
+const metricKey = smartHistoryMetricMeta[metric]?.[0] || metric;
+
+const metricLabel = (
+    translations[state.language]?.[metricKey]
+    || metricKey
 );
 
 const hitPoints = pointPositions.map(
