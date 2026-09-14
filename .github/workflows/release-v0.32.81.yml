@@ -13,312 +13,171 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Apply frontend v0.32.81
+      - name: Apply v0.32.81 frontend changes
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
 
-          index_path = Path('static/index.html')
-          text = index_path.read_text(encoding='utf-8')
+          p = Path('static/index.html')
+          text = p.read_text(encoding='utf-8')
 
-          # Remove the v0.32.80 Settings X completely. Settings intentionally
-          # keeps its existing close behavior and receives no close button.
-          text, n = re.subn(
+          # Remove only the wrongly added Settings X from v0.32.80.
+          text, n1 = re.subn(
               r'\n?<style id="dm-settings-close-match-update-monitor-v03280">[\s\S]*?</style>\n?',
-              '\n',
-              text,
-              count=1,
+              '\n', text, count=1
           )
-          if n != 1:
-              raise SystemExit(f'Expected Settings X style once, removed {n}')
-
-          text, n = re.subn(
+          text, n2 = re.subn(
               r'\n\s*<button\b(?=[^>]*\bclass="settings-panel-close")(?=[^>]*\bid="settingsPanelClose")[\s\S]*?</button>\s*',
-              '\n',
-              text,
-              count=1,
+              '\n', text, count=1
           )
-          if n != 1:
-              raise SystemExit(f'Expected Settings X button once, removed {n}')
-
-          text, n = re.subn(
+          text, n3 = re.subn(
               r'\n\s*document\.getElementById\(\s*"settingsPanelClose"\s*\)\.addEventListener\(\s*"click",\s*event\s*=>\s*\{\s*event\.preventDefault\(\);\s*event\.stopPropagation\(\);\s*closeSettings\(\);\s*\}\s*\);\s*',
-              '\n\n',
-              text,
-              count=1,
+              '\n\n', text, count=1
           )
-          if n != 1:
-              raise SystemExit(f'Expected Settings X handler once, removed {n}')
+          if (n1, n2, n3) != (1, 1, 1):
+              raise SystemExit(f'Settings X removal failed: {(n1, n2, n3)}')
 
           if 'v0.32.80' not in text:
-              raise SystemExit('Frontend v0.32.80 marker not found')
+              raise SystemExit('v0.32.80 marker not found')
           text = text.replace('v0.32.80', 'v0.32.81')
 
-          unified_close_style = r'''
+          # Same approved geometric X on all full closeable layouts only.
+          css = r'''
           <style id="dm-unified-modal-close-v03281">
           .disk-details-close,
           .smart-history-modal-close,
           .advanced-smart-close,
-          .smart-full-check-close {
-              width:25px !important;
-              height:25px !important;
-              min-width:25px !important;
-              flex:0 0 25px !important;
-              position:relative !important;
-              padding:0 !important;
-              border:0 !important;
-              border-radius:6px !important;
-              background:transparent !important;
-              box-shadow:none !important;
-              color:#9baab4 !important;
-              font-size:0 !important;
-              line-height:0 !important;
-              cursor:pointer !important;
+          .smart-full-check-close{
+            width:25px!important;height:25px!important;min-width:25px!important;
+            flex:0 0 25px!important;position:relative!important;padding:0!important;
+            border:0!important;border-radius:6px!important;background:transparent!important;
+            box-shadow:none!important;color:#9baab4!important;font-size:0!important;
+            line-height:0!important;cursor:pointer!important;
           }
-
-          .disk-details-close::before,
-          .disk-details-close::after,
-          .smart-history-modal-close::before,
-          .smart-history-modal-close::after,
-          .advanced-smart-close::before,
-          .advanced-smart-close::after,
-          .smart-full-check-close::before,
-          .smart-full-check-close::after {
-              content:"" !important;
-              position:absolute !important;
-              left:50% !important;
-              top:50% !important;
-              width:12px !important;
-              height:1.4px !important;
-              margin:0 !important;
-              padding:0 !important;
-              border:0 !important;
-              border-radius:0 !important;
-              background:#9baab4 !important;
-              transform-origin:center !important;
-              box-shadow:none !important;
+          .disk-details-close::before,.disk-details-close::after,
+          .smart-history-modal-close::before,.smart-history-modal-close::after,
+          .advanced-smart-close::before,.advanced-smart-close::after,
+          .smart-full-check-close::before,.smart-full-check-close::after{
+            content:""!important;position:absolute!important;left:50%!important;top:50%!important;
+            width:12px!important;height:1.4px!important;margin:0!important;padding:0!important;
+            border:0!important;border-radius:0!important;background:#9baab4!important;
+            transform-origin:center!important;box-shadow:none!important;
           }
-
-          .disk-details-close::before,
-          .smart-history-modal-close::before,
-          .advanced-smart-close::before,
-          .smart-full-check-close::before {
-              transform:translate(-50%,-50%) rotate(45deg) !important;
+          .disk-details-close::before,.smart-history-modal-close::before,
+          .advanced-smart-close::before,.smart-full-check-close::before{
+            transform:translate(-50%,-50%) rotate(45deg)!important;
           }
-
-          .disk-details-close::after,
-          .smart-history-modal-close::after,
-          .advanced-smart-close::after,
-          .smart-full-check-close::after {
-              transform:translate(-50%,-50%) rotate(-45deg) !important;
+          .disk-details-close::after,.smart-history-modal-close::after,
+          .advanced-smart-close::after,.smart-full-check-close::after{
+            transform:translate(-50%,-50%) rotate(-45deg)!important;
           }
-
-          .disk-details-close:hover,
-          .disk-details-close:focus-visible,
-          .smart-history-modal-close:hover,
-          .smart-history-modal-close:focus-visible,
-          .advanced-smart-close:hover,
-          .advanced-smart-close:focus-visible,
-          .smart-full-check-close:hover,
-          .smart-full-check-close:focus-visible {
-              border:0 !important;
-              background:rgba(55,126,204,.18) !important;
-              box-shadow:none !important;
-              outline:none !important;
+          .disk-details-close:hover,.disk-details-close:focus-visible,
+          .smart-history-modal-close:hover,.smart-history-modal-close:focus-visible,
+          .advanced-smart-close:hover,.advanced-smart-close:focus-visible,
+          .smart-full-check-close:hover,.smart-full-check-close:focus-visible{
+            border:0!important;background:rgba(55,126,204,.18)!important;
+            box-shadow:none!important;outline:none!important;
           }
-
-          .disk-details-close:hover::before,
-          .disk-details-close:hover::after,
-          .disk-details-close:focus-visible::before,
-          .disk-details-close:focus-visible::after,
-          .smart-history-modal-close:hover::before,
-          .smart-history-modal-close:hover::after,
-          .smart-history-modal-close:focus-visible::before,
-          .smart-history-modal-close:focus-visible::after,
-          .advanced-smart-close:hover::before,
-          .advanced-smart-close:hover::after,
-          .advanced-smart-close:focus-visible::before,
-          .advanced-smart-close:focus-visible::after,
-          .smart-full-check-close:hover::before,
-          .smart-full-check-close:hover::after,
-          .smart-full-check-close:focus-visible::before,
-          .smart-full-check-close:focus-visible::after {
-              background:#a9d5ff !important;
+          .disk-details-close:hover::before,.disk-details-close:hover::after,
+          .disk-details-close:focus-visible::before,.disk-details-close:focus-visible::after,
+          .smart-history-modal-close:hover::before,.smart-history-modal-close:hover::after,
+          .smart-history-modal-close:focus-visible::before,.smart-history-modal-close:focus-visible::after,
+          .advanced-smart-close:hover::before,.advanced-smart-close:hover::after,
+          .advanced-smart-close:focus-visible::before,.advanced-smart-close:focus-visible::after,
+          .smart-full-check-close:hover::before,.smart-full-check-close:hover::after,
+          .smart-full-check-close:focus-visible::before,.smart-full-check-close:focus-visible::after{
+            background:#a9d5ff!important;
           }
-
-          .smart-history-hit-point {
-              fill:transparent;
-              stroke:transparent;
-              pointer-events:all;
-              cursor:crosshair;
-          }
+          .smart-history-hit-point{fill:transparent;stroke:transparent;pointer-events:all;cursor:crosshair;}
           </style>
           '''
           if 'dm-unified-modal-close-v03281' in text:
-              raise SystemExit('Unified close style already exists unexpectedly')
-          if '</head>' not in text:
-              raise SystemExit('Could not find </head>')
-          text = text.replace('</head>', unified_close_style + '\n</head>', 1)
+              raise SystemExit('v0.32.81 style already present')
+          text = text.replace('</head>', css + '\n</head>', 1)
 
-          function_start = text.find('    function buildSmartHistorySvg(')
-          if function_start < 0:
-              raise SystemExit('buildSmartHistorySvg not found')
-          points_start = text.find('        const points = values.map(', function_start)
-          grid_start = text.find('        const grid = [0, .5, 1].map(', points_start)
-          if points_start < 0 or grid_start < 0:
-              raise SystemExit('SMART history point block not found')
+          # Add date/time/value hover targets to every SMART history sample.
+          fn = text.find('    function buildSmartHistorySvg(')
+          start = text.find('        const points = values.map(', fn)
+          grid = text.find('        const grid = [0, .5, 1].map(', start)
+          if fn < 0 or start < 0 or grid < 0:
+              raise SystemExit('SMART history coordinate block not found')
 
-          point_block = r'''        const pointPositions = values.map(
+          replacement = r'''        const pointPositions = values.map(
               (value, index) => {
-
-                  const x = (
-                      l
-                      + (
-                          (times[index] - minTime)
-                          / (maxTime - minTime)
-                      ) * pw
-                  );
-
-                  const y = (
-                      t
-                      + (
-                          1
-                          - (
-                              (value - min)
-                              / (max - min)
-                          )
-                      ) * ph
-                  );
-
-                  return {
-                      x,
-                      y,
-                      value,
-                      row: rows[index]
-                  };
-
+                  const x = l + ((times[index] - minTime) / (maxTime - minTime)) * pw;
+                  const y = t + (1 - ((value - min) / (max - min))) * ph;
+                  return {x, y, value, row: rows[index]};
               }
           );
 
           const points = pointPositions.map(
-              point =>
-                  `${point.x.toFixed(1)},${point.y.toFixed(1)}`
+              point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`
           ).join(" ");
 
           const metricLabel = t(
-              smartHistoryMetricMeta[metric]?.[0]
-              || metric
+              smartHistoryMetricMeta[metric]?.[0] || metric
           );
 
           const hitPoints = pointPositions.map(
               point => {
-
-                  const tooltip = (
-                      `${formatLocalizedDateTime(
-                          new Date(point.row.recorded_at)
-                      )} · ${metricLabel}: ${formatSmartHistoryValue(
-                          metric,
-                          point.value
-                      )}`
-                  );
-
-                  return `
-                      <circle
-                          class="smart-history-hit-point"
-                          cx="${point.x.toFixed(1)}"
-                          cy="${point.y.toFixed(1)}"
-                          r="8"
-                      >
-                          <title>${escapeHtml(tooltip)}</title>
-                      </circle>
-                  `;
-
+                  const tooltip = `${formatLocalizedDateTime(
+                      new Date(point.row.recorded_at)
+                  )} · ${metricLabel}: ${formatSmartHistoryValue(metric, point.value)}`;
+                  return `<circle class="smart-history-hit-point"
+                      cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="8">
+                      <title>${escapeHtml(tooltip)}</title></circle>`;
               }
           ).join("");
 
           '''
-          text = text[:points_start] + point_block + text[grid_start:]
+          text = text[:start] + replacement + text[grid:]
 
-          polyline = '''                <polyline
-                      class="smart-history-line"
-                      points="${points}"
-                  />'''
-          if polyline not in text:
+          line_class = text.find('class="smart-history-line"', fn)
+          tag_start = text.rfind('<polyline', fn, line_class)
+          tag_end = text.find('/>', line_class)
+          if line_class < 0 or tag_start < 0 or tag_end < 0:
               raise SystemExit('SMART history polyline not found')
-          text = text.replace(
-              polyline,
-              polyline + '''
-
-                  ${hitPoints}''',
-              1,
-          )
+          tag_end += 2
+          text = text[:tag_end] + '\n\n                  ${hitPoints}' + text[tag_end:]
 
           if 'settingsPanelClose' in text or 'settings-panel-close' in text:
-              raise SystemExit('Settings X was not fully removed')
-          for close_class in (
-              'disk-details-close',
-              'smart-history-modal-close',
-              'advanced-smart-close',
-              'smart-full-check-close',
-          ):
-              if close_class not in text:
-                  raise SystemExit(f'Missing modal close control: {close_class}')
-          if text.count('dm-unified-modal-close-v03281') != 1:
-              raise SystemExit('Unified modal close style validation failed')
+              raise SystemExit('Settings still contains the new X')
+          for c in ('disk-details-close','smart-history-modal-close','advanced-smart-close','smart-full-check-close'):
+              if c not in text:
+                  raise SystemExit(f'Missing close control: {c}')
           if 'smart-history-hit-point' not in text or '${hitPoints}' not in text:
-              raise SystemExit('SMART history hover validation failed')
-          if 'v0.32.81' not in text:
-              raise SystemExit('Frontend version validation failed')
-
-          index_path.write_text(text, encoding='utf-8')
+              raise SystemExit('SMART history hover not installed')
+          p.write_text(text, encoding='utf-8')
 
           readme = Path('README.md')
-          readme_text = readme.read_text(encoding='utf-8')
-          if '- Frontend: `0.32.80`' not in readme_text:
-              raise SystemExit('README frontend version marker not found')
-          readme.write_text(
-              readme_text.replace(
-                  '- Frontend: `0.32.80`',
-                  '- Frontend: `0.32.81`',
-                  1,
-              ),
-              encoding='utf-8',
-          )
+          r = readme.read_text(encoding='utf-8')
+          if '- Frontend: `0.32.80`' not in r:
+              raise SystemExit('README version not found')
+          readme.write_text(r.replace('- Frontend: `0.32.80`','- Frontend: `0.32.81`',1), encoding='utf-8')
 
           compose = Path('docker-compose.zimaos.yml')
-          compose_text = compose.read_text(encoding='utf-8')
-          if 'version: "0.32.80"' not in compose_text:
-              raise SystemExit('ZimaOS version marker not found')
-          compose_text = compose_text.replace(
-              'version: "0.32.80"',
-              'version: "0.32.81"',
-              1,
-          )
-          compose_text = re.sub(
-              r'update_at: "[0-9]{4}-[0-9]{2}-[0-9]{2}"',
-              'update_at: "2026-09-14"',
-              compose_text,
-              count=1,
-          )
-          compose.write_text(compose_text, encoding='utf-8')
+          c = compose.read_text(encoding='utf-8')
+          if 'version: "0.32.80"' not in c:
+              raise SystemExit('Compose version not found')
+          c = c.replace('version: "0.32.80"','version: "0.32.81"',1)
+          c = re.sub(r'update_at: "[0-9]{4}-[0-9]{2}-[0-9]{2}"','update_at: "2026-09-14"',c,count=1)
+          compose.write_text(c, encoding='utf-8')
           PY
 
-      - name: Remove one-time release workflow
+      - name: Remove one-time workflow
         run: rm -f .github/workflows/release-v0.32.81.yml
 
       - name: Validate requested scope
         shell: bash
         run: |
-          git diff --stat
           test "$(git diff --name-only | sort | tr '\n' ' ')" = ".github/workflows/release-v0.32.81.yml README.md docker-compose.zimaos.yml static/index.html "
           grep -q 'v0.32.81' static/index.html
           ! grep -q 'settingsPanelClose' static/index.html
