@@ -59,13 +59,10 @@ jobs:
           if n != 1:
               raise SystemExit(f'Expected Settings X handler once, removed {n}')
 
-          # Frontend version.
           if 'v0.32.80' not in text:
               raise SystemExit('Frontend v0.32.80 marker not found')
           text = text.replace('v0.32.80', 'v0.32.81')
 
-          # Exact geometric X style from the approved Update Monitor control,
-          # scoped only to the real full layouts/modals. No header/menu changes.
           unified_close_style = r'''
           <style id="dm-unified-modal-close-v03281">
           .disk-details-close,
@@ -172,10 +169,6 @@ jobs:
               raise SystemExit('Could not find </head>')
           text = text.replace('</head>', unified_close_style + '\n</head>', 1)
 
-          # Add an invisible hover target to every SMART history sample. It uses
-          # the currently selected metric, so the same behavior automatically
-          # covers temperature, power-on hours, power cycles, wear, media errors,
-          # and every other metric returned by the history API.
           function_start = text.find('    function buildSmartHistorySvg(')
           if function_start < 0:
               raise SystemExit('buildSmartHistorySvg not found')
@@ -252,7 +245,7 @@ jobs:
               }
           ).join("");
 
-'''
+          '''
           text = text[:points_start] + point_block + text[grid_start:]
 
           polyline = '''                <polyline
@@ -269,7 +262,6 @@ jobs:
               1,
           )
 
-          # Static validation before writing.
           if 'settingsPanelClose' in text or 'settings-panel-close' in text:
               raise SystemExit('Settings X was not fully removed')
           for close_class in (
