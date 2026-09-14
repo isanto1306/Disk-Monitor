@@ -7,7 +7,7 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 ## Current development versions
 
 - Backend: `0.22.35`
-- Frontend: `0.32.83`
+- Frontend: `0.32.84`
 
 ## Docker image
 
@@ -33,7 +33,7 @@ ghcr.io/isanto1306/disk-monitor:latest
 - RAID standby controls with safety checks
 - ZimaOS standby-timer integration where available
 - Current process/path attribution where the host exposes enough information
-- German and English UI
+- German, English, French, Portuguese (Portugal) and Spanish UI
 - Desktop, tablet and mobile responsive work in progress
 
 ## SMART automation
