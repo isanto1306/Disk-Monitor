@@ -36,6 +36,32 @@ ghcr.io/isanto1306/disk-monitor:latest
 - German, English, French, Portuguese (Portugal) and Spanish UI
 - Desktop, tablet and mobile responsive work in progress
 
+## Screenshots
+
+### Dashboard
+
+![Disk Monitor dashboard](https://raw.githubusercontent.com/isanto1306/zima-appstore/main/Apps/DiskMonitor/screenshot-1-dashboard.webp)
+
+### Drive details
+
+![Disk Monitor drive details](https://raw.githubusercontent.com/isanto1306/zima-appstore/main/Apps/DiskMonitor/screenshot-2-drive-details.webp)
+
+### USB standby drive details
+
+![Disk Monitor USB standby drive details](https://raw.githubusercontent.com/isanto1306/zima-appstore/main/Apps/DiskMonitor/screenshot-3-usb-standby.webp)
+
+### SMART Check
+
+![Disk Monitor SMART Check](https://raw.githubusercontent.com/isanto1306/zima-appstore/main/Apps/DiskMonitor/screenshot-4-smart-check.webp)
+
+### Advanced SMART data
+
+![Disk Monitor advanced SMART data](https://raw.githubusercontent.com/isanto1306/zima-appstore/main/Apps/DiskMonitor/screenshot-5-smart-details.webp)
+
+### SMART history
+
+![Disk Monitor SMART history](https://raw.githubusercontent.com/isanto1306/zima-appstore/main/Apps/DiskMonitor/screenshot-6-smart-history.webp)
+
 ## SMART automation
 
 For `3× daily`, the day is split into these windows:
