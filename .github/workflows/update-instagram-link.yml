@@ -1,0 +1,46 @@
+name: Update Instagram link
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  update-instagram:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Instagram link and frontend version
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('static/index.html')
+          s = p.read_text(encoding='utf-8')
+          old = 'https://www.instagram.com/diskmonitorzimaos/'
+          new = 'https://www.instagram.com/isanto1306apps/'
+          if old not in s:
+              raise SystemExit('Old Instagram URL not found')
+          s = s.replace(old, new)
+          s = s.replace('aria-label="Disk Monitor ZimaOS auf Instagram öffnen"', 'aria-label="iSanto1306 Apps auf Instagram öffnen"')
+          s = s.replace('v0.32.85', 'v0.32.86')
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Commit change and remove helper workflow
+        shell: bash
+        run: |
+          git config user.name "isanto1306"
+          git config user.email "185259594+isanto1306@users.noreply.github.com"
+          git rm .github/workflows/update-instagram-link.yml
+          git add static/index.html
+          git commit -m "Update Instagram link to isanto1306apps"
+          git push
