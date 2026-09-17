@@ -75,8 +75,8 @@ services:
       volumes:
         - container: /app/cache
           description:
-            en_US: Disk Monitor AppData - persistent SMART history, settings and runtime cache.
-            de_DE: Disk-Monitor-AppData - persistenter SMART-Verlauf, Einstellungen und Laufzeit-Cache.
+            en_US: Persistent Disk Monitor settings, SMART history and runtime cache.
+            de_DE: Persistente Disk Monitor Einstellungen, SMART Verlauf und Laufzeit Cache.
 
 x-casaos:
   id: com.isanto1306.disk-monitor
@@ -91,17 +91,17 @@ x-casaos:
     de_DE: Disk Monitor
   tagline:
     en_US: Storage, SMART and disk activity monitoring for ZimaOS/Linux
-    de_DE: Speicher-, SMART- und Festplattenaktivitätsüberwachung für ZimaOS/Linux
+    de_DE: Speicher, SMART und Festplattenaktivitätsüberwachung für ZimaOS/Linux
   description:
     en_US: Self-hosted disk monitoring dashboard with SMART health, temperature, standby state, activity and RAID information.
-    de_DE: Selbst gehostetes Festplatten-Dashboard mit SMART-Zustand, Temperatur, Standby-Status, Aktivität und RAID-Informationen.
+    de_DE: Selbst gehostetes Festplatten Dashboard mit SMART Zustand, Temperatur, Standby Status, Aktivität und RAID Informationen.
   author: isanto1306
   developer: isanto1306
   category: Utilities
   architectures:
     - amd64
-  version: "0.32.84"
-  update_at: "2026-09-14"
+  version: "0.32.86"
+  update_at: "2026-09-17"
   repo: https://github.com/isanto1306/Disk-Monitor
   support: https://github.com/isanto1306/Disk-Monitor/issues
   docs: https://github.com/isanto1306/Disk-Monitor#readme
