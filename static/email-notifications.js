@@ -1,0 +1,633 @@
+(() => {
+    "use strict";
+
+    const UI = {
+        de: {
+            button: "E Mail Benachrichtigungen",
+            title: "E Mail Benachrichtigungen",
+            intro: "Benachrichtigungen bei Laufwerksfehlern, kritischen SMART Werten, RAID Problemen oder hoher Temperatur.",
+            enabled: "E Mail Benachrichtigungen aktivieren",
+            smtpServer: "SMTP Server",
+            smtpPort: "SMTP Port",
+            encryption: "Verschlüsselung",
+            starttls: "STARTTLS",
+            sslTls: "SSL/TLS",
+            none: "Keine",
+            username: "Benutzername",
+            password: "Passwort",
+            passwordSaved: "Gespeichertes Passwort bleibt erhalten",
+            sender: "Absenderadresse",
+            recipient: "Empfängeradresse",
+            emailLanguage: "E Mail Sprache",
+            autoLanguage: "Automatisch wie Disk Monitor",
+            temperatureLimit: "Temperaturwarnung ab",
+            events: "Benachrichtigungen",
+            smartHealth: "SMART Fehler",
+            smartAttributes: "Kritische SMART Werte verändert",
+            missingDrive: "Laufwerk nicht mehr erkannt",
+            raid: "RAID Fehler",
+            temperature: "Temperaturwarnung",
+            recovery: "Entwarnung senden",
+            test: "Test E Mail senden",
+            save: "Speichern",
+            close: "Schließen",
+            loading: "Einstellungen werden geladen …",
+            saved: "Einstellungen gespeichert.",
+            testSent: "Test E Mail wurde gesendet.",
+            failed: "Aktion fehlgeschlagen.",
+            configured: "Eingerichtet",
+            disabled: "Deaktiviert",
+            sendFailed: "Letzter Versand fehlgeschlagen",
+            noPassword: "Passwort noch nicht gespeichert"
+        },
+        en: {
+            button: "Email notifications",
+            title: "Email notifications",
+            intro: "Notifications for drive failures, critical SMART values, RAID problems or high temperature.",
+            enabled: "Enable email notifications",
+            smtpServer: "SMTP server",
+            smtpPort: "SMTP port",
+            encryption: "Encryption",
+            starttls: "STARTTLS",
+            sslTls: "SSL/TLS",
+            none: "None",
+            username: "Username",
+            password: "Password",
+            passwordSaved: "Saved password will be kept",
+            sender: "Sender address",
+            recipient: "Recipient address",
+            emailLanguage: "Email language",
+            autoLanguage: "Automatic like Disk Monitor",
+            temperatureLimit: "Temperature warning from",
+            events: "Notifications",
+            smartHealth: "SMART errors",
+            smartAttributes: "Critical SMART values changed",
+            missingDrive: "Drive no longer detected",
+            raid: "RAID errors",
+            temperature: "Temperature warning",
+            recovery: "Send recovery message",
+            test: "Send test email",
+            save: "Save",
+            close: "Close",
+            loading: "Loading settings …",
+            saved: "Settings saved.",
+            testSent: "Test email was sent.",
+            failed: "Action failed.",
+            configured: "Configured",
+            disabled: "Disabled",
+            sendFailed: "Last delivery failed",
+            noPassword: "No password saved yet"
+        },
+        fr: {
+            button: "Notifications e mail",
+            title: "Notifications e mail",
+            intro: "Notifications en cas de panne de disque, valeurs SMART critiques, problèmes RAID ou température élevée.",
+            enabled: "Activer les notifications e mail",
+            smtpServer: "Serveur SMTP",
+            smtpPort: "Port SMTP",
+            encryption: "Chiffrement",
+            starttls: "STARTTLS",
+            sslTls: "SSL/TLS",
+            none: "Aucun",
+            username: "Nom d’utilisateur",
+            password: "Mot de passe",
+            passwordSaved: "Le mot de passe enregistré sera conservé",
+            sender: "Adresse expéditeur",
+            recipient: "Adresse destinataire",
+            emailLanguage: "Langue des e mails",
+            autoLanguage: "Automatique comme Disk Monitor",
+            temperatureLimit: "Alerte de température à partir de",
+            events: "Notifications",
+            smartHealth: "Erreurs SMART",
+            smartAttributes: "Valeurs SMART critiques modifiées",
+            missingDrive: "Disque non détecté",
+            raid: "Erreurs RAID",
+            temperature: "Alerte de température",
+            recovery: "Envoyer le retour à la normale",
+            test: "Envoyer un e mail de test",
+            save: "Enregistrer",
+            close: "Fermer",
+            loading: "Chargement des paramètres …",
+            saved: "Paramètres enregistrés.",
+            testSent: "E mail de test envoyé.",
+            failed: "Échec de l’action.",
+            configured: "Configuré",
+            disabled: "Désactivé",
+            sendFailed: "Dernier envoi échoué",
+            noPassword: "Aucun mot de passe enregistré"
+        },
+        pt: {
+            button: "Notificações por e mail",
+            title: "Notificações por e mail",
+            intro: "Notificações para falhas de unidades, valores SMART críticos, problemas RAID ou temperatura elevada.",
+            enabled: "Ativar notificações por e mail",
+            smtpServer: "Servidor SMTP",
+            smtpPort: "Porta SMTP",
+            encryption: "Encriptação",
+            starttls: "STARTTLS",
+            sslTls: "SSL/TLS",
+            none: "Nenhuma",
+            username: "Utilizador",
+            password: "Palavra passe",
+            passwordSaved: "A palavra passe guardada será mantida",
+            sender: "Endereço do remetente",
+            recipient: "Endereço do destinatário",
+            emailLanguage: "Idioma do e mail",
+            autoLanguage: "Automático como o Disk Monitor",
+            temperatureLimit: "Aviso de temperatura a partir de",
+            events: "Notificações",
+            smartHealth: "Erros SMART",
+            smartAttributes: "Valores SMART críticos alterados",
+            missingDrive: "Unidade deixou de ser detetada",
+            raid: "Erros RAID",
+            temperature: "Aviso de temperatura",
+            recovery: "Enviar mensagem de normalização",
+            test: "Enviar e mail de teste",
+            save: "Guardar",
+            close: "Fechar",
+            loading: "A carregar definições …",
+            saved: "Definições guardadas.",
+            testSent: "E mail de teste enviado.",
+            failed: "A ação falhou.",
+            configured: "Configurado",
+            disabled: "Desativado",
+            sendFailed: "Último envio falhou",
+            noPassword: "Ainda não existe palavra passe guardada"
+        },
+        es: {
+            button: "Notificaciones por correo",
+            title: "Notificaciones por correo",
+            intro: "Notificaciones por fallos de unidades, valores SMART críticos, problemas RAID o temperatura alta.",
+            enabled: "Activar notificaciones por correo",
+            smtpServer: "Servidor SMTP",
+            smtpPort: "Puerto SMTP",
+            encryption: "Cifrado",
+            starttls: "STARTTLS",
+            sslTls: "SSL/TLS",
+            none: "Ninguno",
+            username: "Usuario",
+            password: "Contraseña",
+            passwordSaved: "La contraseña guardada se conservará",
+            sender: "Dirección del remitente",
+            recipient: "Dirección del destinatario",
+            emailLanguage: "Idioma del correo",
+            autoLanguage: "Automático como Disk Monitor",
+            temperatureLimit: "Aviso de temperatura desde",
+            events: "Notificaciones",
+            smartHealth: "Errores SMART",
+            smartAttributes: "Valores SMART críticos modificados",
+            missingDrive: "Unidad ya no detectada",
+            raid: "Errores RAID",
+            temperature: "Aviso de temperatura",
+            recovery: "Enviar recuperación",
+            test: "Enviar correo de prueba",
+            save: "Guardar",
+            close: "Cerrar",
+            loading: "Cargando ajustes …",
+            saved: "Ajustes guardados.",
+            testSent: "Correo de prueba enviado.",
+            failed: "La acción ha fallado.",
+            configured: "Configurado",
+            disabled: "Desactivado",
+            sendFailed: "El último envío falló",
+            noPassword: "Todavía no hay contraseña guardada"
+        }
+    };
+
+    let settings = null;
+    let busy = false;
+
+    function language() {
+        const lang = String(document.documentElement.lang || "en").toLowerCase().split("-")[0];
+        return UI[lang] ? lang : "en";
+    }
+
+    function text(key) {
+        const lang = language();
+        return (UI[lang] && UI[lang][key]) || UI.en[key] || key;
+    }
+
+    function injectStyle() {
+        if (document.getElementById("dmEmailNotificationStyles")) return;
+        const style = document.createElement("style");
+        style.id = "dmEmailNotificationStyles";
+        style.textContent = `
+            #emailNotificationsButton {
+                width: 40px;
+                height: 40px;
+                flex: 0 0 40px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                border: 1px solid rgba(91,156,255,.34);
+                border-radius: 7px;
+                background: rgba(24,34,45,.94);
+                color: #d5e5ff;
+                position: relative;
+            }
+            #emailNotificationsButton:hover {
+                background: rgba(45,78,112,.78);
+                border-color: rgba(91,156,255,.58);
+            }
+            #emailNotificationsButton svg { width: 21px; height: 21px; display: block; }
+            #emailNotificationsButton .dm-email-status-dot {
+                position: absolute;
+                right: 5px;
+                top: 5px;
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: #718091;
+                box-shadow: 0 0 0 2px #18222d;
+            }
+            #emailNotificationsButton.dm-email-active .dm-email-status-dot {
+                background: #43c17c;
+                box-shadow: 0 0 7px rgba(67,193,124,.8), 0 0 0 2px #18222d;
+            }
+            #emailNotificationsButton.dm-email-error .dm-email-status-dot {
+                background: #e06363;
+                box-shadow: 0 0 7px rgba(224,99,99,.75), 0 0 0 2px #18222d;
+            }
+            #dmEmailOverlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                z-index: 330;
+                align-items: center;
+                justify-content: center;
+                padding: 24px;
+                background: rgba(3,8,13,.76);
+                backdrop-filter: blur(3px);
+            }
+            #dmEmailOverlay.visible { display: flex; }
+            .dm-email-dialog {
+                width: min(720px, calc(100vw - 48px));
+                max-height: min(88vh, 860px);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                border: 1px solid rgba(82,105,127,.72);
+                border-radius: 14px;
+                background: #17222c;
+                box-shadow: 0 24px 70px rgba(0,0,0,.62);
+                color: #d7e0e8;
+            }
+            .dm-email-head {
+                display: grid;
+                grid-template-columns: 44px minmax(0,1fr) 40px;
+                align-items: center;
+                gap: 12px;
+                padding: 18px 20px;
+                border-bottom: 1px solid rgba(67,87,107,.48);
+                background: #1d2a36;
+            }
+            .dm-email-head-icon {
+                width: 42px;
+                height: 42px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid rgba(91,156,255,.34);
+                border-radius: 10px;
+                background: rgba(91,156,255,.08);
+                color: #a9c9ff;
+            }
+            .dm-email-head-icon svg { width: 24px; height: 24px; }
+            .dm-email-title { margin: 0; color: #edf4f8; font-size: 18px; font-weight: 760; }
+            .dm-email-intro { margin: 4px 0 0; color: #8fa2b5; font-size: 11.5px; line-height: 1.4; }
+            .dm-email-close {
+                width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+                border: 0; border-radius: 8px; background: transparent; color: #9eb0c0; font-size: 27px; padding: 0;
+            }
+            .dm-email-close:hover { background: rgba(255,255,255,.06); color: #eef4f8; }
+            .dm-email-body { padding: 18px 20px 20px; overflow-y: auto; scrollbar-width: thin; }
+            .dm-email-enable-row {
+                display: flex; align-items: center; justify-content: space-between; gap: 18px;
+                padding: 12px 14px; margin-bottom: 15px; border: 1px solid rgba(91,156,255,.24);
+                border-radius: 10px; background: rgba(16,28,39,.62);
+            }
+            .dm-email-enable-row label { color: #edf4f8; font-size: 13px; font-weight: 760; }
+            .dm-email-switch { width: 38px; height: 22px; accent-color: #5b9cff; }
+            .dm-email-grid { display: grid; grid-template-columns: 1fr 150px; gap: 12px; }
+            .dm-email-field { min-width: 0; }
+            .dm-email-field.dm-wide { grid-column: 1 / -1; }
+            .dm-email-field label, .dm-email-section-title {
+                display: block; margin-bottom: 6px; color: #8fa2b5; font-size: 10.5px; font-weight: 700;
+            }
+            .dm-email-field input, .dm-email-field select {
+                width: 100%; min-height: 38px; box-sizing: border-box; border: 1px solid rgba(82,105,127,.72);
+                border-radius: 7px; background: #0d151d; color: #d7e0e8; padding: 8px 10px; outline: none;
+            }
+            .dm-email-field input:focus, .dm-email-field select:focus { border-color: rgba(91,156,255,.75); }
+            .dm-email-events {
+                margin-top: 16px; padding: 13px 14px 10px; border: 1px solid rgba(82,105,127,.48);
+                border-radius: 10px; background: rgba(13,21,29,.52);
+            }
+            .dm-email-event-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 18px; }
+            .dm-email-check { display: flex; align-items: center; gap: 9px; min-height: 30px; color: #c8d4df; font-size: 11.5px; }
+            .dm-email-check input { accent-color: #5b9cff; }
+            .dm-email-status { min-height: 18px; margin-top: 12px; color: #8fa2b5; font-size: 11px; }
+            .dm-email-status.success { color: #65d796; }
+            .dm-email-status.error { color: #ee8585; }
+            .dm-email-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
+            .dm-email-action {
+                min-height: 34px; padding: 0 13px; border: 1px solid rgba(82,105,127,.72); border-radius: 7px;
+                background: #1b2631; color: #d7e0e8; font-size: 10.5px; font-weight: 750;
+            }
+            .dm-email-action:hover:not(:disabled) { background: #243443; }
+            .dm-email-action.primary { border-color: rgba(91,156,255,.48); background: rgba(45,78,112,.72); color: #eef5ff; }
+            .dm-email-action:disabled { opacity: .5; cursor: wait; }
+            @media (max-width: 640px) {
+                #dmEmailOverlay { padding: 8px; }
+                .dm-email-dialog { width: 100%; max-height: 96vh; }
+                .dm-email-head { padding: 14px; grid-template-columns: 40px minmax(0,1fr) 36px; }
+                .dm-email-body { padding: 14px; }
+                .dm-email-grid, .dm-email-event-grid { grid-template-columns: 1fr; }
+                .dm-email-actions { flex-wrap: wrap; }
+                .dm-email-action { flex: 1 1 auto; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function createButton() {
+        if (document.getElementById("emailNotificationsButton")) return;
+        const smartButton = document.getElementById("smartFullCheckButton");
+        if (!smartButton || !smartButton.parentElement) return;
+        const button = document.createElement("button");
+        button.id = "emailNotificationsButton";
+        button.type = "button";
+        button.setAttribute("aria-haspopup", "dialog");
+        button.setAttribute("aria-controls", "dmEmailOverlay");
+        button.innerHTML = `
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4.5 6.5h15v11h-15z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+                <path d="m5.3 7.4 6.7 5 6.7-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span class="dm-email-status-dot" aria-hidden="true"></span>
+        `;
+        button.addEventListener("click", openDialog);
+        smartButton.parentElement.insertBefore(button, smartButton);
+        translateUi();
+    }
+
+    function createOverlay() {
+        if (document.getElementById("dmEmailOverlay")) return;
+        const overlay = document.createElement("div");
+        overlay.id = "dmEmailOverlay";
+        overlay.setAttribute("aria-hidden", "true");
+        overlay.innerHTML = `
+            <div class="dm-email-dialog" role="dialog" aria-modal="true" aria-labelledby="dmEmailTitle">
+                <div class="dm-email-head">
+                    <div class="dm-email-head-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M4.5 6.5h15v11h-15z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+                            <path d="m5.3 7.4 6.7 5 6.7-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    </div>
+                    <div><h2 class="dm-email-title" id="dmEmailTitle"></h2><p class="dm-email-intro" id="dmEmailIntro"></p></div>
+                    <button class="dm-email-close" id="dmEmailClose" type="button">×</button>
+                </div>
+                <div class="dm-email-body">
+                    <div class="dm-email-enable-row"><label for="dmEmailEnabled" id="dmEmailEnabledLabel"></label><input class="dm-email-switch" id="dmEmailEnabled" type="checkbox"></div>
+                    <div class="dm-email-grid">
+                        <div class="dm-email-field"><label for="dmSmtpHost" id="dmSmtpHostLabel"></label><input id="dmSmtpHost" type="text" autocomplete="off" placeholder="smtp.example.com"></div>
+                        <div class="dm-email-field"><label for="dmSmtpPort" id="dmSmtpPortLabel"></label><input id="dmSmtpPort" type="number" min="1" max="65535" inputmode="numeric"></div>
+                        <div class="dm-email-field"><label for="dmSmtpUsername" id="dmSmtpUsernameLabel"></label><input id="dmSmtpUsername" type="text" autocomplete="username"></div>
+                        <div class="dm-email-field"><label for="dmEncryption" id="dmEncryptionLabel"></label><select id="dmEncryption"><option value="starttls">STARTTLS</option><option value="ssl_tls">SSL/TLS</option><option value="none">None</option></select></div>
+                        <div class="dm-email-field dm-wide"><label for="dmSmtpPassword" id="dmSmtpPasswordLabel"></label><input id="dmSmtpPassword" type="password" autocomplete="new-password"></div>
+                        <div class="dm-email-field"><label for="dmSender" id="dmSenderLabel"></label><input id="dmSender" type="email" autocomplete="off"></div>
+                        <div class="dm-email-field"><label for="dmRecipient" id="dmRecipientLabel"></label><input id="dmRecipient" type="email" autocomplete="off"></div>
+                        <div class="dm-email-field"><label for="dmEmailLanguage" id="dmEmailLanguageLabel"></label><select id="dmEmailLanguage"><option value="auto"></option><option value="de">Deutsch</option><option value="en">English</option><option value="fr">Français</option><option value="pt">Português</option><option value="es">Español</option></select></div>
+                        <div class="dm-email-field"><label for="dmTemperatureLimit" id="dmTemperatureLimitLabel"></label><input id="dmTemperatureLimit" type="number" min="35" max="90" inputmode="numeric"></div>
+                    </div>
+                    <div class="dm-email-events">
+                        <div class="dm-email-section-title" id="dmEmailEventsTitle"></div>
+                        <div class="dm-email-event-grid">
+                            <label class="dm-email-check"><input id="dmNotifySmartHealth" type="checkbox"><span id="dmNotifySmartHealthLabel"></span></label>
+                            <label class="dm-email-check"><input id="dmNotifySmartAttributes" type="checkbox"><span id="dmNotifySmartAttributesLabel"></span></label>
+                            <label class="dm-email-check"><input id="dmNotifyMissingDrive" type="checkbox"><span id="dmNotifyMissingDriveLabel"></span></label>
+                            <label class="dm-email-check"><input id="dmNotifyRaid" type="checkbox"><span id="dmNotifyRaidLabel"></span></label>
+                            <label class="dm-email-check"><input id="dmNotifyTemperature" type="checkbox"><span id="dmNotifyTemperatureLabel"></span></label>
+                            <label class="dm-email-check"><input id="dmNotifyRecovery" type="checkbox"><span id="dmNotifyRecoveryLabel"></span></label>
+                        </div>
+                    </div>
+                    <div class="dm-email-status" id="dmEmailStatus"></div>
+                    <div class="dm-email-actions">
+                        <button class="dm-email-action" id="dmEmailTest" type="button"></button>
+                        <button class="dm-email-action" id="dmEmailCancel" type="button"></button>
+                        <button class="dm-email-action primary" id="dmEmailSave" type="button"></button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        document.getElementById("dmEmailClose").addEventListener("click", closeDialog);
+        document.getElementById("dmEmailCancel").addEventListener("click", closeDialog);
+        document.getElementById("dmEmailSave").addEventListener("click", () => saveSettings(false));
+        document.getElementById("dmEmailTest").addEventListener("click", sendTest);
+        overlay.addEventListener("click", event => { if (event.target === overlay) closeDialog(); });
+        document.addEventListener("keydown", event => { if (event.key === "Escape" && overlay.classList.contains("visible")) closeDialog(); });
+        translateUi();
+    }
+
+    function translateUi() {
+        const button = document.getElementById("emailNotificationsButton");
+        if (button) { button.title = text("button"); button.setAttribute("aria-label", text("button")); }
+        const map = {
+            dmEmailTitle: "title", dmEmailIntro: "intro", dmEmailEnabledLabel: "enabled",
+            dmSmtpHostLabel: "smtpServer", dmSmtpPortLabel: "smtpPort", dmEncryptionLabel: "encryption",
+            dmSmtpUsernameLabel: "username", dmSmtpPasswordLabel: "password", dmSenderLabel: "sender",
+            dmRecipientLabel: "recipient", dmEmailLanguageLabel: "emailLanguage", dmTemperatureLimitLabel: "temperatureLimit",
+            dmEmailEventsTitle: "events", dmNotifySmartHealthLabel: "smartHealth", dmNotifySmartAttributesLabel: "smartAttributes",
+            dmNotifyMissingDriveLabel: "missingDrive", dmNotifyRaidLabel: "raid", dmNotifyTemperatureLabel: "temperature",
+            dmNotifyRecoveryLabel: "recovery", dmEmailTest: "test", dmEmailCancel: "close", dmEmailSave: "save"
+        };
+        for (const [id, key] of Object.entries(map)) {
+            const element = document.getElementById(id);
+            if (element) element.textContent = text(key);
+        }
+        const auto = document.querySelector('#dmEmailLanguage option[value="auto"]');
+        if (auto) auto.textContent = text("autoLanguage");
+        const none = document.querySelector('#dmEncryption option[value="none"]');
+        if (none) none.textContent = text("none");
+        const password = document.getElementById("dmSmtpPassword");
+        if (password && settings && settings.password_set) password.placeholder = text("passwordSaved");
+        updateButtonState(settings);
+    }
+
+    function setBusy(value) {
+        busy = value;
+        ["dmEmailTest", "dmEmailCancel", "dmEmailSave", "dmEmailClose"].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.disabled = value;
+        });
+    }
+
+    function status(message, kind = "") {
+        const element = document.getElementById("dmEmailStatus");
+        if (!element) return;
+        element.textContent = message || "";
+        element.className = "dm-email-status" + (kind ? ` ${kind}` : "");
+    }
+
+    function updateButtonState(value) {
+        const button = document.getElementById("emailNotificationsButton");
+        if (!button) return;
+        button.classList.remove("dm-email-active", "dm-email-error");
+        if (!value || !value.enabled) { button.title = `${text("button")} · ${text("disabled")}`; return; }
+        if (value.last_error) { button.classList.add("dm-email-error"); button.title = `${text("button")} · ${text("sendFailed")}`; return; }
+        button.classList.add("dm-email-active"); button.title = `${text("button")} · ${text("configured")}`;
+    }
+
+    function applySettings(value) {
+        settings = value;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ""; };
+        const check = (id, v) => { const el = document.getElementById(id); if (el) el.checked = Boolean(v); };
+        check("dmEmailEnabled", value.enabled);
+        set("dmSmtpHost", value.smtp_host);
+        set("dmSmtpPort", value.smtp_port || 587);
+        set("dmEncryption", value.encryption || "starttls");
+        set("dmSmtpUsername", value.username);
+        set("dmSmtpPassword", "");
+        set("dmSender", value.sender);
+        set("dmRecipient", value.recipient);
+        set("dmEmailLanguage", value.language || "auto");
+        set("dmTemperatureLimit", value.temperature_threshold_c || 55);
+        check("dmNotifySmartHealth", value.notify_smart_health);
+        check("dmNotifySmartAttributes", value.notify_smart_attributes);
+        check("dmNotifyMissingDrive", value.notify_missing_drive);
+        check("dmNotifyRaid", value.notify_raid);
+        check("dmNotifyTemperature", value.notify_temperature);
+        check("dmNotifyRecovery", value.notify_recovery);
+        const password = document.getElementById("dmSmtpPassword");
+        if (password) password.placeholder = value.password_set ? text("passwordSaved") : text("noPassword");
+        updateButtonState(value);
+    }
+
+    function payload() {
+        const value = id => document.getElementById(id).value;
+        const checked = id => document.getElementById(id).checked;
+        const data = {
+            enabled: checked("dmEmailEnabled"), smtp_host: value("dmSmtpHost").trim(),
+            smtp_port: Number(value("dmSmtpPort") || 587), encryption: value("dmEncryption"),
+            username: value("dmSmtpUsername").trim(), sender: value("dmSender").trim(), recipient: value("dmRecipient").trim(),
+            language: value("dmEmailLanguage"), temperature_threshold_c: Number(value("dmTemperatureLimit") || 55),
+            notify_smart_health: checked("dmNotifySmartHealth"), notify_smart_attributes: checked("dmNotifySmartAttributes"),
+            notify_missing_drive: checked("dmNotifyMissingDrive"), notify_raid: checked("dmNotifyRaid"),
+            notify_temperature: checked("dmNotifyTemperature"), notify_recovery: checked("dmNotifyRecovery")
+        };
+        const password = value("dmSmtpPassword");
+        if (password) data.password = password;
+        return data;
+    }
+
+    async function request(url, options = {}) {
+        const response = await fetch(url, {
+            ...options,
+            headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+        });
+        let data = {};
+        try { data = await response.json(); } catch (_) {}
+        if (!response.ok) {
+            const detail = data && data.detail;
+            const message = typeof detail === "string" ? detail : (detail && detail.message) || text("failed");
+            throw new Error(message);
+        }
+        return data;
+    }
+
+    async function loadSettings() {
+        try {
+            const value = await request("/api/email-notifications/settings");
+            applySettings(value);
+            return value;
+        } catch (error) {
+            status(error.message || text("failed"), "error");
+            return null;
+        }
+    }
+
+    async function saveSettings(quiet) {
+        if (busy) return null;
+        setBusy(true);
+        if (!quiet) status("");
+        try {
+            const value = await request("/api/email-notifications/settings", {
+                method: "POST", body: JSON.stringify(payload())
+            });
+            applySettings(value);
+            if (!quiet) status(text("saved"), "success");
+            return value;
+        } catch (error) {
+            status(error.message || text("failed"), "error");
+            return null;
+        } finally { setBusy(false); }
+    }
+
+    async function sendTest() {
+        if (busy) return;
+        const saved = await saveSettings(true);
+        if (!saved) return;
+        setBusy(true);
+        status("");
+        try {
+            await request("/api/email-notifications/test", { method: "POST", body: "{}" });
+            status(text("testSent"), "success");
+            await loadSettings();
+        } catch (error) {
+            status(error.message || text("failed"), "error");
+            await loadSettings();
+        } finally { setBusy(false); }
+    }
+
+    async function syncUiLanguage() {
+        const lang = language();
+        try {
+            await request("/api/email-notifications/ui-language", {
+                method: "POST", body: JSON.stringify({ language: lang })
+            });
+        } catch (_) {}
+    }
+
+    async function openDialog() {
+        const overlay = document.getElementById("dmEmailOverlay");
+        if (!overlay) return;
+        overlay.classList.add("visible");
+        overlay.setAttribute("aria-hidden", "false");
+        status(text("loading"));
+        await syncUiLanguage();
+        await loadSettings();
+        if (document.getElementById("dmEmailStatus").textContent === text("loading")) status("");
+    }
+
+    function closeDialog() {
+        if (busy) return;
+        const overlay = document.getElementById("dmEmailOverlay");
+        if (!overlay) return;
+        overlay.classList.remove("visible");
+        overlay.setAttribute("aria-hidden", "true");
+    }
+
+    function initialize() {
+        injectStyle();
+        createButton();
+        createOverlay();
+        translateUi();
+        setTimeout(() => { loadSettings(); syncUiLanguage(); }, 900);
+
+        const observer = new MutationObserver(mutations => {
+            if (mutations.some(item => item.attributeName === "lang")) {
+                translateUi();
+                syncUiLanguage();
+            }
+        });
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+
+        const languageSelect = document.getElementById("languageSelect");
+        if (languageSelect) languageSelect.addEventListener("change", () => setTimeout(syncUiLanguage, 0));
+    }
+
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });
+    else initialize();
+})();

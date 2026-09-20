@@ -6,8 +6,8 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 
 ## Current development versions
 
-- Backend: `0.22.35`
-- Frontend: `0.32.86`
+- Backend: `0.22.36`
+- Frontend: `0.32.87`
 
 ## Docker image
 
@@ -29,6 +29,8 @@ ghcr.io/isanto1306/disk-monitor:latest
 - One-time first-install full SMART check across all detected drives
 - Automatic SMART refresh: Off, 1×, 2× or 3× daily
 - Normal automatic SMART checks avoid waking sleeping HDDs
+- Configurable SMTP email alerts for SMART, drive disappearance, RAID and temperature events with an independent notification language
+- Email alert monitoring follows the existing no-wake policy and does not wake sleeping HDDs just to send notifications
 - RAID detection, RAID member overview and SMART integration
 - RAID standby controls with safety checks
 - ZimaOS standby-timer integration where available
@@ -95,6 +97,7 @@ Never commit or share:
 - runtime cache files
 - SMART history/cache containing drive identities or serial numbers
 - host logs containing private paths or machine-specific information
+- SMTP credentials stored in the persistent cache when email notifications are configured
 
 ## Installation
 

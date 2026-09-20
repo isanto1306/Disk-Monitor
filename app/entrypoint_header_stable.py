@@ -8,11 +8,14 @@ from fastapi import Request
 from fastapi.routing import APIRoute
 
 import entrypoint
+import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.35"
-entrypoint.main.app.version = "0.22.35"
+app.version = "0.22.36"
+entrypoint.main.app.version = "0.22.36"
+
+email_notifications.install(app, entrypoint.main)
 
 
 STANDBY_SINCE_STATE_FILE = Path(
@@ -328,6 +331,18 @@ if _original_disks_route is not None:
 # the page. Skip that extra padding only when the body-width compensation is
 # already active. The scroll lock itself and all panel behavior stay unchanged.
 if entrypoint._index_html is not None:
+    entrypoint._index_html = entrypoint._index_html.replace(
+        '"v0.32.86"',
+        '"v0.32.87"',
+        1,
+    )
+
+    if 'email-notifications.js?v=0.32.87' not in entrypoint._index_html:
+        entrypoint._index_html = entrypoint._index_html.replace(
+            '</body>',
+            '<script src="/email-notifications.js?v=0.32.87"></script>\n</body>',
+            1,
+        )
     entrypoint._index_html = entrypoint._index_html.replace(
         "header {\n    width: 100vw;\n}",
         "#app > header {\n    width: 100vw !important;\n}",
