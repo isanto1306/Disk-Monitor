@@ -312,6 +312,12 @@
             .dm-email-grid { display: grid; grid-template-columns: 1fr 150px; gap: 12px; }
             .dm-email-field { min-width: 0; }
             .dm-email-field.dm-wide { grid-column: 1 / -1; }
+            .dm-email-address-row {
+                grid-column: 1 / -1;
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                gap: 12px;
+            }
             .dm-email-field label, .dm-email-section-title {
                 display: block; margin-bottom: 6px; color: #8fa2b5; font-size: 10.5px; font-weight: 700;
             }
@@ -343,7 +349,7 @@
                 .dm-email-dialog { width: 100%; max-height: 96vh; }
                 .dm-email-head { padding: 14px; grid-template-columns: 40px minmax(0,1fr) 36px; }
                 .dm-email-body { padding: 14px; }
-                .dm-email-grid, .dm-email-event-grid { grid-template-columns: 1fr; }
+                .dm-email-grid, .dm-email-event-grid, .dm-email-address-row { grid-template-columns: 1fr; }
                 .dm-email-actions { flex-wrap: wrap; }
                 .dm-email-action { flex: 1 1 auto; }
             }
@@ -397,8 +403,10 @@
                         <div class="dm-email-field"><label for="dmSmtpUsername" id="dmSmtpUsernameLabel"></label><input id="dmSmtpUsername" type="text" autocomplete="username"></div>
                         <div class="dm-email-field"><label for="dmEncryption" id="dmEncryptionLabel"></label><select id="dmEncryption"><option value="starttls">STARTTLS</option><option value="ssl_tls">SSL/TLS</option><option value="none">None</option></select></div>
                         <div class="dm-email-field dm-wide"><label for="dmSmtpPassword" id="dmSmtpPasswordLabel"></label><input id="dmSmtpPassword" type="password" autocomplete="new-password"></div>
-                        <div class="dm-email-field"><label for="dmSender" id="dmSenderLabel"></label><input id="dmSender" type="email" autocomplete="off"></div>
-                        <div class="dm-email-field"><label for="dmRecipient" id="dmRecipientLabel"></label><input id="dmRecipient" type="email" autocomplete="off"></div>
+                        <div class="dm-email-address-row">
+                            <div class="dm-email-field"><label for="dmSender" id="dmSenderLabel"></label><input id="dmSender" type="email" autocomplete="off"></div>
+                            <div class="dm-email-field"><label for="dmRecipient" id="dmRecipientLabel"></label><input id="dmRecipient" type="email" autocomplete="off"></div>
+                        </div>
                         <div class="dm-email-field"><label for="dmEmailLanguage" id="dmEmailLanguageLabel"></label><select id="dmEmailLanguage"><option value="auto"></option><option value="de">Deutsch</option><option value="en">English</option><option value="fr">Français</option><option value="pt">Português</option><option value="es">Español</option></select></div>
                         <div class="dm-email-field"><label for="dmTemperatureLimit" id="dmTemperatureLimitLabel"></label><input id="dmTemperatureLimit" type="number" min="35" max="90" inputmode="numeric"></div>
                     </div>
