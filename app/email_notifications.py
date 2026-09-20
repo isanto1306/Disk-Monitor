@@ -819,4 +819,4 @@ def install(app, main_module):
         return
     INSTALLED = True
     app.include_router(router)
-    app.add_event_handler("startup", _startup_email_monitor)
+    app.router.add_event_handler("startup", _startup_email_monitor)
