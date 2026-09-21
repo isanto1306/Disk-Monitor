@@ -377,6 +377,59 @@
                 border-color: rgba(91,156,255,.82);
                 box-shadow: 0 0 0 1px rgba(91,156,255,.14);
             }
+            .dm-email-number-wrap {
+                position: relative;
+                width: 100%;
+            }
+            #dmSmtpPort {
+                padding-right: 34px;
+                -moz-appearance: textfield;
+            }
+            #dmSmtpPort::-webkit-outer-spin-button,
+            #dmSmtpPort::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+            .dm-email-number-controls {
+                position: absolute;
+                top: 1px;
+                right: 1px;
+                bottom: 1px;
+                width: 29px;
+                display: grid;
+                grid-template-rows: 1fr 1fr;
+                overflow: hidden;
+                border-left: 1px solid rgba(91,156,255,.52);
+                border-radius: 0 6px 6px 0;
+                background: #0d151d;
+            }
+            .dm-email-number-button {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 0;
+                min-height: 0;
+                padding: 0;
+                border: 0;
+                background: transparent;
+                color: #7fb2ff;
+                cursor: pointer;
+            }
+            .dm-email-number-button + .dm-email-number-button {
+                border-top: 1px solid rgba(91,156,255,.34);
+            }
+            .dm-email-number-button:hover,
+            .dm-email-number-button:focus-visible {
+                background: rgba(91,156,255,.14);
+                color: #a9c9ff;
+                outline: none;
+            }
+            .dm-email-number-button svg {
+                width: 10px;
+                height: 7px;
+                display: block;
+                pointer-events: none;
+            }
             .dm-email-native-select {
                 position: absolute !important;
                 width: 1px !important;
@@ -394,7 +447,7 @@
                 align-items: center;
                 border: 1px solid rgba(91,156,255,.52);
                 border-radius: 7px;
-                background: rgba(22,40,57,.86);
+                background: #0d151d;
                 color: #d7e0e8;
                 padding: 8px 34px 8px 10px;
                 font-size: 10.5px;
@@ -420,7 +473,7 @@
                 border-color: rgba(91,156,255,.72);
                 border-top-color: transparent;
                 border-radius: 0 0 7px 7px;
-                background: rgba(27,47,67,.94);
+                background: #0d151d;
             }
             .dm-email-select-wrap.open .dm-email-select-button::after {
                 transform: translateY(-65%) rotate(45deg);
@@ -443,7 +496,7 @@
                 border: 1px solid rgba(91,156,255,.72);
                 border-bottom: 0;
                 border-radius: 7px 7px 0 0;
-                background: #1b2f43;
+                background: #0d151d;
                 box-shadow: 0 -12px 24px rgba(0,0,0,.28);
                 scrollbar-width: thin;
                 scrollbar-color: rgba(91,156,255,.55) rgba(14,24,34,.35);
@@ -646,6 +699,34 @@
         ), 55);
     }
 
+    function setupSmtpPortStepper() {
+        const input = document.getElementById("dmSmtpPort");
+        const up = document.getElementById("dmSmtpPortUp");
+        const down = document.getElementById("dmSmtpPortDown");
+        if (!input || !up || !down) return;
+
+        const adjust = delta => {
+            const min = Number(input.min || 1);
+            const max = Number(input.max || 65535);
+            let current = Number(input.value);
+            if (!Number.isFinite(current)) current = 587;
+            const next = Math.min(max, Math.max(min, Math.round(current) + delta));
+            input.value = String(next);
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+            input.focus({ preventScroll: true });
+        };
+
+        up.addEventListener("click", event => {
+            event.preventDefault();
+            adjust(1);
+        });
+        down.addEventListener("click", event => {
+            event.preventDefault();
+            adjust(-1);
+        });
+    }
+
     function createOverlay() {
         if (document.getElementById("dmEmailOverlay")) return;
         const overlay = document.createElement("div");
@@ -667,7 +748,7 @@
                     <div class="dm-email-enable-row"><label for="dmEmailEnabled" id="dmEmailEnabledLabel"></label><input class="dm-email-switch" id="dmEmailEnabled" type="checkbox"></div>
                     <div class="dm-email-grid">
                         <div class="dm-email-field"><label for="dmSmtpHost" id="dmSmtpHostLabel"></label><input id="dmSmtpHost" type="text" autocomplete="off" placeholder="smtp.example.com"></div>
-                        <div class="dm-email-field"><label for="dmSmtpPort" id="dmSmtpPortLabel"></label><input id="dmSmtpPort" type="number" min="1" max="65535" inputmode="numeric"></div>
+                        <div class="dm-email-field"><label for="dmSmtpPort" id="dmSmtpPortLabel"></label><div class="dm-email-number-wrap"><input id="dmSmtpPort" type="number" min="1" max="65535" inputmode="numeric"><div class="dm-email-number-controls" aria-hidden="false"><button class="dm-email-number-button" id="dmSmtpPortUp" type="button" aria-label="SMTP Port +"><svg viewBox="0 0 12 8" aria-hidden="true"><path d="M2 6 6 2l4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="dm-email-number-button" id="dmSmtpPortDown" type="button" aria-label="SMTP Port −"><svg viewBox="0 0 12 8" aria-hidden="true"><path d="m2 2 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></div></div></div>
                         <div class="dm-email-field"><label for="dmSmtpUsername" id="dmSmtpUsernameLabel"></label><input id="dmSmtpUsername" type="text" autocomplete="username"></div>
                         <div class="dm-email-field"><label for="dmEncryption" id="dmEncryptionLabel"></label><select id="dmEncryption"><option value="starttls">STARTTLS</option><option value="ssl_tls">SSL/TLS</option><option value="none">None</option></select></div>
                         <div class="dm-email-field dm-wide"><label for="dmSmtpPassword" id="dmSmtpPasswordLabel"></label><input id="dmSmtpPassword" type="password" autocomplete="new-password"></div>
@@ -705,6 +786,7 @@
         document.getElementById("dmEmailCancel").addEventListener("click", closeDialog);
         document.getElementById("dmEmailSave").addEventListener("click", () => saveSettings(false));
         document.getElementById("dmEmailTest").addEventListener("click", sendTest);
+        setupSmtpPortStepper();
         enhanceCustomSelect("dmEncryption");
         enhanceCustomSelect("dmEmailLanguage");
         enhanceCustomSelect("dmReport");
