@@ -265,8 +265,12 @@
                 background: transparent;
                 color: #c8d2dc;
                 position: relative;
-                transform: translateX(-15px);
+                margin-left: auto;
+                margin-right: 0;
                 transition: color .14s ease;
+            }
+            #emailNotificationsButton + #settingsButton {
+                margin-left: 0 !important;
             }
             #emailNotificationsButton:hover,
             #emailNotificationsButton:focus-visible {
@@ -623,6 +627,7 @@
     function createButton() {
         if (document.getElementById("emailNotificationsButton")) return;
         const smartButton = document.getElementById("smartFullCheckButton");
+        const settingsButton = document.getElementById("settingsButton");
         if (!smartButton || !smartButton.parentElement) return;
         const button = document.createElement("button");
         button.id = "emailNotificationsButton";
@@ -637,7 +642,11 @@
             <span class="dm-email-status-dot" aria-hidden="true"></span>
         `;
         button.addEventListener("click", openDialog);
-        smartButton.parentElement.insertBefore(button, smartButton);
+        if (settingsButton && settingsButton.parentElement) {
+            settingsButton.parentElement.insertBefore(button, settingsButton);
+        } else {
+            smartButton.insertAdjacentElement("afterend", button);
+        }
         translateUi();
     }
 
