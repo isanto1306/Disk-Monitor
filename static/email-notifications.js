@@ -265,6 +265,7 @@
                 background: transparent;
                 color: #c8d2dc;
                 position: relative;
+                transform: translateX(-15px);
                 transition: color .14s ease;
             }
             #emailNotificationsButton:hover,
