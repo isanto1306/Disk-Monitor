@@ -504,6 +504,16 @@
             .dm-email-select-menu::-webkit-scrollbar { width: 6px; }
             .dm-email-select-menu::-webkit-scrollbar-track { background: rgba(14,24,34,.35); }
             .dm-email-select-menu::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(91,156,255,.55); }
+            #dmReportCustom .dm-email-select-menu,
+            #dmTemperatureLimitCustom .dm-email-select-menu {
+                max-height: none;
+                overflow-y: visible;
+                scrollbar-width: none;
+            }
+            #dmReportCustom .dm-email-select-menu::-webkit-scrollbar,
+            #dmTemperatureLimitCustom .dm-email-select-menu::-webkit-scrollbar {
+                display: none;
+            }
             .dm-email-select-wrap.open .dm-email-select-menu { display: block; }
             .dm-email-select-wrap.open { z-index: 90; }
             .dm-email-select-option {
