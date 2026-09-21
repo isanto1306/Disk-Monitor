@@ -260,17 +260,24 @@
                 align-items: center;
                 justify-content: center;
                 padding: 0;
-                border: 1px solid rgba(91,156,255,.34);
+                border: 0;
                 border-radius: 7px;
-                background: rgba(24,34,45,.94);
-                color: #d5e5ff;
+                background: transparent;
+                color: #c8d2dc;
                 position: relative;
+                transition: color .14s ease;
             }
-            #emailNotificationsButton:hover {
-                background: rgba(45,78,112,.78);
-                border-color: rgba(91,156,255,.58);
+            #emailNotificationsButton:hover,
+            #emailNotificationsButton:focus-visible {
+                background: transparent;
+                color: #7fb2ff;
+                outline: none;
             }
-            #emailNotificationsButton svg { width: 21px; height: 21px; display: block; }
+            #emailNotificationsButton svg {
+                width: 25px;
+                height: 25px;
+                display: block;
+            }
             #emailNotificationsButton .dm-email-status-dot {
                 position: absolute;
                 right: 5px;
