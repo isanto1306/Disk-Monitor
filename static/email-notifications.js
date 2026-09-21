@@ -389,7 +389,7 @@
                 align-items: center;
                 border: 1px solid rgba(91,156,255,.52);
                 border-radius: 7px;
-                background: rgba(14,24,34,.76);
+                background: rgba(22,40,57,.86);
                 color: #d7e0e8;
                 padding: 8px 34px 8px 10px;
                 font-size: 10.5px;
@@ -546,6 +546,11 @@
 
     function selectOptionLabel(selectId, option) {
         const value = String(option.value || "");
+        if (selectId === "dmEncryption") {
+            if (value === "starttls") return text("starttls");
+            if (value === "ssl_tls") return text("sslTls");
+            if (value === "none") return text("none");
+        }
         if (selectId === "dmEmailLanguage") return value === "auto" ? text("autoLanguage") : option.textContent;
         if (selectId === "dmReport") return reportOptionLabel(value);
         if (selectId === "dmTemperatureLimit") return temperatureOptionLabel(value);
@@ -694,6 +699,7 @@
         document.getElementById("dmEmailCancel").addEventListener("click", closeDialog);
         document.getElementById("dmEmailSave").addEventListener("click", () => saveSettings(false));
         document.getElementById("dmEmailTest").addEventListener("click", sendTest);
+        enhanceCustomSelect("dmEncryption");
         enhanceCustomSelect("dmEmailLanguage");
         enhanceCustomSelect("dmReport");
         enhanceCustomSelect("dmTemperatureLimit");
@@ -735,6 +741,7 @@
         if (none) none.textContent = text("none");
         const password = document.getElementById("dmSmtpPassword");
         if (password && settings && settings.password_set) password.placeholder = text("passwordSaved");
+        syncCustomSelect("dmEncryption");
         syncCustomSelect("dmEmailLanguage");
         syncCustomSelect("dmReport");
         syncCustomSelect("dmTemperatureLimit");
@@ -788,6 +795,7 @@
         check("dmNotifyRecovery", value.notify_recovery);
         const password = document.getElementById("dmSmtpPassword");
         if (password) password.placeholder = value.password_set ? text("passwordSaved") : text("noPassword");
+        syncCustomSelect("dmEncryption");
         syncCustomSelect("dmEmailLanguage");
         syncCustomSelect("dmReport");
         syncCustomSelect("dmTemperatureLimit");
