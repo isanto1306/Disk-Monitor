@@ -307,7 +307,7 @@
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
-                border: 1px solid rgba(82,105,127,.72);
+                border: 1px solid rgba(91,156,255,.52);
                 border-radius: 14px;
                 background: #17222c;
                 box-shadow: 0 24px 70px rgba(0,0,0,.62);
@@ -319,7 +319,7 @@
                 align-items: center;
                 gap: 12px;
                 padding: 18px 20px;
-                border-bottom: 1px solid rgba(67,87,107,.48);
+                border-bottom: 1px solid rgba(91,156,255,.52);
                 background: #1d2a36;
             }
             .dm-email-head-icon {
@@ -344,7 +344,7 @@
             .dm-email-body { padding: 18px 20px 20px; overflow-y: auto; scrollbar-width: thin; }
             .dm-email-enable-row {
                 display: flex; align-items: center; justify-content: space-between; gap: 18px;
-                padding: 12px 14px; margin-bottom: 15px; border: 1px solid rgba(91,156,255,.24);
+                padding: 12px 14px; margin-bottom: 15px; border: 1px solid rgba(91,156,255,.52);
                 border-radius: 10px; background: rgba(16,28,39,.62);
             }
             .dm-email-enable-row label { color: #edf4f8; font-size: 13px; font-weight: 760; }
@@ -368,10 +368,15 @@
                 display: block; margin-bottom: 6px; color: #8fa2b5; font-size: 10.5px; font-weight: 700;
             }
             .dm-email-field input, .dm-email-field select {
-                width: 100%; min-height: 38px; box-sizing: border-box; border: 1px solid rgba(82,105,127,.72);
+                width: 100%; min-height: 38px; box-sizing: border-box; border: 1px solid rgba(91,156,255,.52);
                 border-radius: 7px; background: #0d151d; color: #d7e0e8; padding: 8px 10px; outline: none;
+                transition: border-color .14s ease, box-shadow .14s ease, background .14s ease;
             }
-            .dm-email-field input:focus, .dm-email-field select:focus { border-color: rgba(91,156,255,.75); }
+            .dm-email-field input:hover, .dm-email-field select:hover { border-color: rgba(91,156,255,.68); }
+            .dm-email-field input:focus, .dm-email-field select:focus {
+                border-color: rgba(91,156,255,.82);
+                box-shadow: 0 0 0 1px rgba(91,156,255,.14);
+            }
             .dm-email-native-select {
                 position: absolute !important;
                 width: 1px !important;
@@ -454,7 +459,7 @@
                 display: flex;
                 align-items: center;
                 border: 0;
-                border-top: 1px solid rgba(42,58,74,.42);
+                border-top: 1px solid rgba(91,156,255,.24);
                 background: transparent;
                 color: #b8d1ff;
                 padding: 7px 10px;
@@ -466,7 +471,7 @@
             .dm-email-select-option:hover,
             .dm-email-select-option.active { background: rgba(91,156,255,.18); color: #e0edff; }
             .dm-email-events {
-                margin-top: 16px; padding: 13px 14px 10px; border: 1px solid rgba(82,105,127,.48);
+                margin-top: 16px; padding: 13px 14px 10px; border: 1px solid rgba(91,156,255,.52);
                 border-radius: 10px; background: rgba(13,21,29,.52);
             }
             .dm-email-event-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 18px; }
@@ -477,11 +482,12 @@
             .dm-email-status.error { color: #ee8585; }
             .dm-email-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
             .dm-email-action {
-                min-height: 34px; padding: 0 13px; border: 1px solid rgba(82,105,127,.72); border-radius: 7px;
+                min-height: 34px; padding: 0 13px; border: 1px solid rgba(91,156,255,.52); border-radius: 7px;
                 background: #1b2631; color: #d7e0e8; font-size: 10.5px; font-weight: 750;
+                transition: border-color .14s ease, background .14s ease;
             }
-            .dm-email-action:hover:not(:disabled) { background: #243443; }
-            .dm-email-action.primary { border-color: rgba(91,156,255,.48); background: rgba(45,78,112,.72); color: #eef5ff; }
+            .dm-email-action:hover:not(:disabled) { border-color: rgba(91,156,255,.72); background: rgba(45,78,112,.48); }
+            .dm-email-action.primary { border-color: rgba(91,156,255,.72); background: rgba(45,78,112,.72); color: #eef5ff; }
             .dm-email-action:disabled { opacity: .5; cursor: wait; }
             @media (max-width: 640px) {
                 #dmEmailOverlay { padding: 8px; }
