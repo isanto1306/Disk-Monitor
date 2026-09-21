@@ -337,10 +337,57 @@
             .dm-email-title { margin: 0; color: #edf4f8; font-size: 18px; font-weight: 760; }
             .dm-email-intro { margin: 4px 0 0; color: #8fa2b5; font-size: 11.5px; line-height: 1.4; }
             .dm-email-close {
-                width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
-                border: 0; border-radius: 8px; background: transparent; color: #9eb0c0; font-size: 27px; padding: 0;
+                width: 25px !important;
+                height: 25px !important;
+                min-width: 25px !important;
+                flex: 0 0 25px !important;
+                position: relative !important;
+                justify-self: end;
+                padding: 0 !important;
+                border: 0 !important;
+                border-radius: 6px !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                color: #9baab4 !important;
+                font-size: 0 !important;
+                line-height: 0 !important;
+                cursor: pointer !important;
             }
-            .dm-email-close:hover { background: rgba(255,255,255,.06); color: #eef4f8; }
+            .dm-email-close::before,
+            .dm-email-close::after {
+                content: "" !important;
+                position: absolute !important;
+                left: 50% !important;
+                top: 50% !important;
+                width: 12px !important;
+                height: 1.4px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                border-radius: 0 !important;
+                background: #9baab4 !important;
+                transform-origin: center !important;
+                box-shadow: none !important;
+            }
+            .dm-email-close::before {
+                transform: translate(-50%,-50%) rotate(45deg) !important;
+            }
+            .dm-email-close::after {
+                transform: translate(-50%,-50%) rotate(-45deg) !important;
+            }
+            .dm-email-close:hover,
+            .dm-email-close:focus-visible {
+                border: 0 !important;
+                background: rgba(55,126,204,.18) !important;
+                box-shadow: none !important;
+                outline: none !important;
+            }
+            .dm-email-close:hover::before,
+            .dm-email-close:hover::after,
+            .dm-email-close:focus-visible::before,
+            .dm-email-close:focus-visible::after {
+                background: #a9d5ff !important;
+            }
             .dm-email-body { padding: 18px 20px 20px; overflow-y: auto; scrollbar-width: thin; }
             .dm-email-enable-row {
                 display: flex; align-items: center; justify-content: space-between; gap: 18px;
@@ -752,7 +799,7 @@
                         </svg>
                     </div>
                     <div><h2 class="dm-email-title" id="dmEmailTitle"></h2><p class="dm-email-intro" id="dmEmailIntro"></p></div>
-                    <button class="dm-email-close" id="dmEmailClose" type="button">×</button>
+                    <button class="dm-email-close" id="dmEmailClose" type="button"></button>
                 </div>
                 <div class="dm-email-body">
                     <div class="dm-email-enable-row"><label for="dmEmailEnabled" id="dmEmailEnabledLabel"></label><input class="dm-email-switch" id="dmEmailEnabled" type="checkbox"></div>
@@ -832,6 +879,11 @@
         for (const [id, key] of Object.entries(map)) {
             const element = document.getElementById(id);
             if (element) element.textContent = text(key);
+        }
+        const closeButton = document.getElementById("dmEmailClose");
+        if (closeButton) {
+            closeButton.setAttribute("aria-label", text("close"));
+            closeButton.title = text("close");
         }
         const auto = document.querySelector('#dmEmailLanguage option[value="auto"]');
         if (auto) auto.textContent = text("autoLanguage");
