@@ -1,11 +1,12 @@
 import asyncio
+import calendar
 import json
 import os
 import smtplib
 import ssl
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,23 @@ STARTUP_GRACE_SECONDS = 90
 MISSING_CONFIRM_POLLS = 3
 SUPPORTED_LANGUAGES = {"auto", "de", "en", "fr", "pt", "es"}
 SUPPORTED_ENCRYPTION = {"starttls", "ssl_tls", "none"}
+SUPPORTED_REPORT_INTERVALS = {
+    "off",
+    "weekly",
+    "monthly",
+    "3_months",
+    "6_months",
+    "9_months",
+    "yearly",
+}
+SUPPORTED_TEMPERATURE_UNITS = {"celsius", "fahrenheit"}
+REPORT_INTERVAL_MONTHS = {
+    "monthly": 1,
+    "3_months": 3,
+    "6_months": 6,
+    "9_months": 9,
+    "yearly": 12,
+}
 
 CONFIG_LOCK = threading.RLock()
 STATE_LOCK = threading.RLock()
@@ -43,7 +61,9 @@ def _default_config():
         "recipient": "",
         "language": "auto",
         "last_ui_language": "en",
+        "temperature_unit": "celsius",
         "temperature_threshold_c": 55,
+        "report_interval": "off",
         "notify_smart_health": True,
         "notify_smart_attributes": True,
         "notify_missing_drive": True,
@@ -62,6 +82,8 @@ def _default_state():
         "last_error": None,
         "last_error_at": None,
         "last_monitor_at": None,
+        "last_report_at": None,
+        "report_anchor_at": None,
     }
 
 
@@ -111,7 +133,9 @@ class EmailSettingsPayload(BaseModel):
     sender: str = ""
     recipient: str = ""
     language: str = "auto"
+    temperature_unit: str = "celsius"
     temperature_threshold_c: int = 55
+    report_interval: str = "off"
     notify_smart_health: bool = True
     notify_smart_attributes: bool = True
     notify_missing_drive: bool = True
@@ -122,6 +146,7 @@ class EmailSettingsPayload(BaseModel):
 
 class UiLanguagePayload(BaseModel):
     language: str
+    temperature_unit: str | None = None
 
 
 def _clean_config(raw: dict, preserve_password: str = ""):
@@ -161,13 +186,23 @@ def _clean_config(raw: dict, preserve_password: str = ""):
     ui_language = str(raw.get("last_ui_language") or "en").strip().lower()
     cfg["last_ui_language"] = ui_language if ui_language in SUPPORTED_LANGUAGES - {"auto"} else "en"
 
+    temperature_unit = str(raw.get("temperature_unit") or "celsius").strip().lower()
+    if temperature_unit not in SUPPORTED_TEMPERATURE_UNITS:
+        raise HTTPException(status_code=400, detail="invalid_temperature_unit")
+    cfg["temperature_unit"] = temperature_unit
+
     try:
         threshold = int(raw.get("temperature_threshold_c", 55))
     except Exception:
         threshold = 55
-    if not 35 <= threshold <= 90:
+    if threshold not in set(range(30, 81, 5)):
         raise HTTPException(status_code=400, detail="invalid_temperature_threshold")
     cfg["temperature_threshold_c"] = threshold
+
+    report_interval = str(raw.get("report_interval") or "off").strip().lower()
+    if report_interval not in SUPPORTED_REPORT_INTERVALS:
+        raise HTTPException(status_code=400, detail="invalid_report_interval")
+    cfg["report_interval"] = report_interval
 
     for key in (
         "notify_smart_health",
@@ -215,6 +250,7 @@ def _public_config():
             "last_error": STATE.get("last_error"),
             "last_error_at": STATE.get("last_error_at"),
             "last_monitor_at": STATE.get("last_monitor_at"),
+            "last_report_at": STATE.get("last_report_at"),
         }
     return {
         **cfg,
@@ -262,9 +298,19 @@ TEXT = {
         "returned": "The drive is detected again.",
         "raid": "RAID {raid} reports degraded={degraded}, state={state}.",
         "raid_ok": "RAID {raid} is healthy again.",
-        "temperature": "Temperature reached {value} °C (limit {limit} °C).",
-        "temperature_ok": "Temperature returned to {value} °C.",
+        "temperature": "Temperature reached {value} (limit {limit}).",
+        "temperature_ok": "Temperature returned to {value}.",
         "health_ok": "SMART health returned to {value}.",
+        "report_subject": "Disk Monitor report",
+        "report_header": "Disk Monitor status report",
+        "report_disks": "Drives: {count}",
+        "report_health": "SMART",
+        "report_temperature": "Temperature",
+        "report_power": "Power state",
+        "report_raid": "RAID",
+        "report_unknown": "Unknown",
+        "report_none": "None",
+        "report_generated": "Generated",
     },
     "de": {
         "test_subject": "Disk Monitor Test E Mail",
@@ -286,9 +332,19 @@ TEXT = {
         "returned": "Das Laufwerk wird wieder erkannt.",
         "raid": "RAID {raid} meldet degraded={degraded}, Status={state}.",
         "raid_ok": "RAID {raid} ist wieder fehlerfrei.",
-        "temperature": "Die Temperatur hat {value} °C erreicht (Grenze {limit} °C).",
-        "temperature_ok": "Die Temperatur ist wieder auf {value} °C gesunken.",
+        "temperature": "Die Temperatur hat {value} erreicht (Grenze {limit}).",
+        "temperature_ok": "Die Temperatur ist wieder auf {value} gesunken.",
         "health_ok": "Der SMART Zustand ist wieder {value}.",
+        "report_subject": "Disk Monitor Bericht",
+        "report_header": "Disk Monitor Statusbericht",
+        "report_disks": "Laufwerke: {count}",
+        "report_health": "SMART",
+        "report_temperature": "Temperatur",
+        "report_power": "Betriebszustand",
+        "report_raid": "RAID",
+        "report_unknown": "Unbekannt",
+        "report_none": "Keine",
+        "report_generated": "Erstellt",
     },
     "fr": {
         "test_subject": "E mail de test Disk Monitor",
@@ -310,9 +366,19 @@ TEXT = {
         "returned": "Le disque est de nouveau détecté.",
         "raid": "Le RAID {raid} signale degraded={degraded}, état={state}.",
         "raid_ok": "Le RAID {raid} est de nouveau sain.",
-        "temperature": "La température a atteint {value} °C (limite {limit} °C).",
-        "temperature_ok": "La température est revenue à {value} °C.",
+        "temperature": "La température a atteint {value} (limite {limit}).",
+        "temperature_ok": "La température est revenue à {value}.",
         "health_ok": "L’état SMART est revenu à {value}.",
+        "report_subject": "Rapport Disk Monitor",
+        "report_header": "Rapport d’état Disk Monitor",
+        "report_disks": "Disques : {count}",
+        "report_health": "SMART",
+        "report_temperature": "Température",
+        "report_power": "État d’alimentation",
+        "report_raid": "RAID",
+        "report_unknown": "Inconnu",
+        "report_none": "Aucun",
+        "report_generated": "Généré",
     },
     "pt": {
         "test_subject": "E mail de teste do Disk Monitor",
@@ -334,9 +400,19 @@ TEXT = {
         "returned": "A unidade voltou a ser detetada.",
         "raid": "O RAID {raid} indica degraded={degraded}, estado={state}.",
         "raid_ok": "O RAID {raid} voltou ao estado normal.",
-        "temperature": "A temperatura atingiu {value} °C (limite {limit} °C).",
-        "temperature_ok": "A temperatura voltou a {value} °C.",
+        "temperature": "A temperatura atingiu {value} (limite {limit}).",
+        "temperature_ok": "A temperatura voltou a {value}.",
         "health_ok": "O estado SMART voltou a {value}.",
+        "report_subject": "Relatório do Disk Monitor",
+        "report_header": "Relatório de estado do Disk Monitor",
+        "report_disks": "Unidades: {count}",
+        "report_health": "SMART",
+        "report_temperature": "Temperatura",
+        "report_power": "Estado de energia",
+        "report_raid": "RAID",
+        "report_unknown": "Desconhecido",
+        "report_none": "Nenhum",
+        "report_generated": "Gerado",
     },
     "es": {
         "test_subject": "Correo de prueba de Disk Monitor",
@@ -358,9 +434,19 @@ TEXT = {
         "returned": "La unidad vuelve a detectarse.",
         "raid": "El RAID {raid} informa degraded={degraded}, estado={state}.",
         "raid_ok": "El RAID {raid} vuelve a estar correcto.",
-        "temperature": "La temperatura alcanzó {value} °C (límite {limit} °C).",
-        "temperature_ok": "La temperatura volvió a {value} °C.",
+        "temperature": "La temperatura alcanzó {value} (límite {limit}).",
+        "temperature_ok": "La temperatura volvió a {value}.",
         "health_ok": "El estado SMART volvió a {value}.",
+        "report_subject": "Informe de Disk Monitor",
+        "report_header": "Informe de estado de Disk Monitor",
+        "report_disks": "Unidades: {count}",
+        "report_health": "SMART",
+        "report_temperature": "Temperatura",
+        "report_power": "Estado de energía",
+        "report_raid": "RAID",
+        "report_unknown": "Desconocido",
+        "report_none": "Ninguno",
+        "report_generated": "Generado",
     },
 }
 
@@ -480,6 +566,120 @@ def _record_send_error(exc):
         STATE["last_error"] = str(exc)[:500]
         STATE["last_error_at"] = datetime.now(timezone.utc).isoformat()
         _write_json(STATE_FILE, dict(STATE))
+
+
+def _format_temperature(value_c, unit):
+    value = _number(value_c)
+    if value is None:
+        return None
+    if str(unit or "celsius").lower() == "fahrenheit":
+        return f"{round((value * 9 / 5) + 32)} °F"
+    return f"{value} °C"
+
+
+def _parse_state_datetime(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def _add_months(value, months):
+    month_index = (value.month - 1) + int(months)
+    year = value.year + (month_index // 12)
+    month = (month_index % 12) + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
+def _report_due_at(interval, base):
+    if interval == "weekly":
+        return base + timedelta(days=7)
+    months = REPORT_INTERVAL_MONTHS.get(interval)
+    if months:
+        return _add_months(base, months)
+    return None
+
+
+def _format_report(cfg, disks):
+    lang = _resolve_language(cfg)
+    unit = cfg.get("temperature_unit") or "celsius"
+    now_local = datetime.now().astimezone()
+    rows = [item for item in (disks or []) if isinstance(item, dict)]
+    lines = [
+        _tr(lang, "report_header"),
+        f"{_tr(lang, 'report_generated')}: {now_local.strftime('%Y-%m-%d %H:%M:%S %Z')}",
+        _tr(lang, "report_disks").format(count=len(rows)),
+        "",
+    ]
+
+    for disk in sorted(rows, key=lambda item: str(item.get("device") or "")):
+        smart = disk.get("smart") if isinstance(disk.get("smart"), dict) else {}
+        power = disk.get("power_state") if isinstance(disk.get("power_state"), dict) else {}
+        device = str(disk.get("device") or "-")
+        model = str(disk.get("model") or "").strip()
+        health = str(smart.get("health") or _tr(lang, "report_unknown"))
+        temperature = _format_temperature(smart.get("temperature_celsius"), unit)
+        power_state = str(power.get("status") or _tr(lang, "report_unknown"))
+
+        raid_parts = []
+        for raid in disk.get("raid_memberships") or []:
+            if not isinstance(raid, dict):
+                continue
+            raid_name = str(raid.get("device") or "").strip()
+            if not raid_name:
+                continue
+            raid_state = str(raid.get("state") or _tr(lang, "report_unknown"))
+            degraded = _number(raid.get("degraded"))
+            suffix = f", degraded={degraded}" if degraded is not None else ""
+            raid_parts.append(f"{raid_name}: {raid_state}{suffix}")
+
+        lines.append(f"/dev/{device}" + (f" — {model}" if model else ""))
+        lines.append(f"  {_tr(lang, 'report_health')}: {health}")
+        lines.append(f"  {_tr(lang, 'report_temperature')}: {temperature or _tr(lang, 'report_unknown')}")
+        lines.append(f"  {_tr(lang, 'report_power')}: {power_state}")
+        lines.append(
+            f"  {_tr(lang, 'report_raid')}: "
+            + ("; ".join(raid_parts) if raid_parts else _tr(lang, "report_none"))
+        )
+        lines.append("")
+
+    return _tr(lang, "report_subject"), "\n".join(lines).rstrip()
+
+
+def _maybe_send_report(cfg, disks):
+    interval = str(cfg.get("report_interval") or "off").lower()
+    if interval == "off":
+        return False
+
+    now = datetime.now(timezone.utc)
+    last_report = _parse_state_datetime(STATE.get("last_report_at"))
+    anchor = _parse_state_datetime(STATE.get("report_anchor_at"))
+    base = last_report or anchor
+    if base is None:
+        STATE["report_anchor_at"] = now.isoformat()
+        return False
+
+    due_at = _report_due_at(interval, base)
+    if due_at is None or now < due_at:
+        return False
+
+    subject, body = _format_report(cfg, disks)
+    try:
+        _smtp_send(cfg, subject, body)
+        stamp = now.isoformat()
+        STATE["last_report_at"] = stamp
+        STATE["report_anchor_at"] = stamp
+        _record_send_success()
+        return True
+    except Exception as exc:
+        _record_send_error(exc)
+        return False
 
 
 def _format_notification(cfg, title, issue, disk=None, recovery=False):
@@ -625,12 +825,17 @@ def _evaluate_disk(cfg, disk, previous):
         temp_key = f"temperature:{key}"
         if temp is not None and temp >= limit:
             if not _alert_is_active(temp_key):
-                issue = _tr(lang, "temperature").format(value=temp, limit=limit)
+                issue = _tr(lang, "temperature").format(
+                    value=_format_temperature(temp, cfg.get("temperature_unit")),
+                    limit=_format_temperature(limit, cfg.get("temperature_unit")),
+                )
                 if _send_event(cfg, _tr(lang, "event_temperature"), issue, disk):
                     _set_alert(temp_key, temp)
         elif _alert_is_active(temp_key) and temp is not None and temp <= limit - 3:
             if cfg.get("notify_recovery"):
-                issue = _tr(lang, "temperature_ok").format(value=temp)
+                issue = _tr(lang, "temperature_ok").format(
+                    value=_format_temperature(temp, cfg.get("temperature_unit"))
+                )
                 if _send_event(cfg, _tr(lang, "event_temperature"), issue, disk, recovery=True):
                     _clear_alert(temp_key)
             else:
@@ -727,6 +932,7 @@ def _monitor_once(disks):
                     if _send_event(cfg, _tr(lang, "event_drive"), _tr(lang, "missing"), disk):
                         _set_alert(missing_key, True)
 
+        _maybe_send_report(cfg, list(current.values()))
         STATE["last_monitor_at"] = datetime.now(timezone.utc).isoformat()
         _write_json(STATE_FILE, dict(STATE))
 
@@ -769,11 +975,28 @@ def save_email_settings(payload: EmailSettingsPayload, request: Request):
     incoming = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
     with CONFIG_LOCK:
         preserve_password = str(CONFIG.get("password") or "")
+        old_interval = str(CONFIG.get("report_interval") or "off")
+        old_enabled = bool(CONFIG.get("enabled"))
         incoming["last_ui_language"] = CONFIG.get("last_ui_language", "en")
         cleaned = _clean_config(incoming, preserve_password=preserve_password)
         CONFIG.clear()
         CONFIG.update(cleaned)
         _write_json(CONFIG_FILE, dict(CONFIG))
+
+        new_interval = str(cleaned.get("report_interval") or "off")
+        new_enabled = bool(cleaned.get("enabled"))
+        reset_report_schedule = (
+            new_interval != old_interval
+            or (new_enabled and not old_enabled)
+        )
+
+        with STATE_LOCK:
+            if new_interval == "off":
+                STATE["report_anchor_at"] = None
+            elif reset_report_schedule or not STATE.get("report_anchor_at"):
+                STATE["report_anchor_at"] = datetime.now(timezone.utc).isoformat()
+                STATE["last_report_at"] = None
+            _write_json(STATE_FILE, dict(STATE))
     return _public_config()
 
 
@@ -785,8 +1008,21 @@ def save_ui_language(payload: UiLanguagePayload, request: Request):
         raise HTTPException(status_code=400, detail="invalid_language")
     with CONFIG_LOCK:
         CONFIG["last_ui_language"] = language
+        temperature_unit = (
+            str(payload.temperature_unit or "").strip().lower()
+            if payload.temperature_unit is not None
+            else ""
+        )
+        if temperature_unit:
+            if temperature_unit not in SUPPORTED_TEMPERATURE_UNITS:
+                raise HTTPException(status_code=400, detail="invalid_temperature_unit")
+            CONFIG["temperature_unit"] = temperature_unit
         _write_json(CONFIG_FILE, dict(CONFIG))
-    return {"success": True, "language": language}
+    return {
+        "success": True,
+        "language": language,
+        "temperature_unit": CONFIG.get("temperature_unit", "celsius"),
+    }
 
 
 @router.post("/api/email-notifications/test")

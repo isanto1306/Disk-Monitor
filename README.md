@@ -6,8 +6,8 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 
 ## Current development versions
 
-- Backend: `0.22.37`
-- Frontend: `0.32.89`
+- Backend: `0.22.38`
+- Frontend: `0.32.90`
 
 ## Docker image
 
@@ -30,6 +30,8 @@ ghcr.io/isanto1306/disk-monitor:latest
 - Automatic SMART refresh: Off, 1×, 2× or 3× daily
 - Normal automatic SMART checks avoid waking sleeping HDDs
 - Configurable SMTP email alerts for SMART, drive disappearance, RAID and temperature events with an independent notification language
+- Scheduled email status reports: weekly, monthly, every 3, 6 or 9 months, or yearly
+- Temperature warning thresholds from 30 °C to 80 °C in 5 °C steps, displayed in Celsius or Fahrenheit to match the dashboard setting
 - Email alert monitoring follows the existing no-wake policy and does not wake sleeping HDDs just to send notifications
 - RAID detection, RAID member overview and SMART integration
 - RAID standby controls with safety checks

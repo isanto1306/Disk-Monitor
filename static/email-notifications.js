@@ -19,6 +19,14 @@
             sender: "Absenderadresse",
             recipient: "Empfängeradresse",
             emailLanguage: "E Mail Sprache",
+            report: "Bericht",
+            reportOff: "Aus",
+            reportWeekly: "Wöchentlich",
+            reportMonthly: "Monatlich",
+            report3Months: "Alle 3 Monate",
+            report6Months: "Alle 6 Monate",
+            report9Months: "Alle 9 Monate",
+            reportYearly: "Jährlich",
             autoLanguage: "Automatisch wie Disk Monitor",
             temperatureLimit: "Temperaturwarnung ab",
             events: "Benachrichtigungen",
@@ -57,6 +65,14 @@
             sender: "Sender address",
             recipient: "Recipient address",
             emailLanguage: "Email language",
+            report: "Report",
+            reportOff: "Off",
+            reportWeekly: "Weekly",
+            reportMonthly: "Monthly",
+            report3Months: "Every 3 months",
+            report6Months: "Every 6 months",
+            report9Months: "Every 9 months",
+            reportYearly: "Yearly",
             autoLanguage: "Automatic like Disk Monitor",
             temperatureLimit: "Temperature warning from",
             events: "Notifications",
@@ -95,6 +111,14 @@
             sender: "Adresse expéditeur",
             recipient: "Adresse destinataire",
             emailLanguage: "Langue des e mails",
+            report: "Rapport",
+            reportOff: "Désactivé",
+            reportWeekly: "Hebdomadaire",
+            reportMonthly: "Mensuel",
+            report3Months: "Tous les 3 mois",
+            report6Months: "Tous les 6 mois",
+            report9Months: "Tous les 9 mois",
+            reportYearly: "Annuel",
             autoLanguage: "Automatique comme Disk Monitor",
             temperatureLimit: "Alerte de température à partir de",
             events: "Notifications",
@@ -133,6 +157,14 @@
             sender: "Endereço do remetente",
             recipient: "Endereço do destinatário",
             emailLanguage: "Idioma do e mail",
+            report: "Relatório",
+            reportOff: "Desativado",
+            reportWeekly: "Semanal",
+            reportMonthly: "Mensal",
+            report3Months: "A cada 3 meses",
+            report6Months: "A cada 6 meses",
+            report9Months: "A cada 9 meses",
+            reportYearly: "Anual",
             autoLanguage: "Automático como o Disk Monitor",
             temperatureLimit: "Aviso de temperatura a partir de",
             events: "Notificações",
@@ -171,6 +203,14 @@
             sender: "Dirección del remitente",
             recipient: "Dirección del destinatario",
             emailLanguage: "Idioma del correo",
+            report: "Informe",
+            reportOff: "Desactivado",
+            reportWeekly: "Semanal",
+            reportMonthly: "Mensual",
+            report3Months: "Cada 3 meses",
+            report6Months: "Cada 6 meses",
+            report9Months: "Cada 9 meses",
+            reportYearly: "Anual",
             autoLanguage: "Automático como Disk Monitor",
             temperatureLimit: "Aviso de temperatura desde",
             events: "Notificaciones",
@@ -318,6 +358,12 @@
                 grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
                 gap: 12px;
             }
+            .dm-email-preferences-row {
+                grid-column: 1 / -1;
+                display: grid;
+                grid-template-columns: minmax(0, .92fr) minmax(0, .98fr) minmax(0, .82fr);
+                gap: 12px;
+            }
             .dm-email-field label, .dm-email-section-title {
                 display: block; margin-bottom: 6px; color: #8fa2b5; font-size: 10.5px; font-weight: 700;
             }
@@ -326,6 +372,99 @@
                 border-radius: 7px; background: #0d151d; color: #d7e0e8; padding: 8px 10px; outline: none;
             }
             .dm-email-field input:focus, .dm-email-field select:focus { border-color: rgba(91,156,255,.75); }
+            .dm-email-native-select {
+                position: absolute !important;
+                width: 1px !important;
+                height: 1px !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                overflow: hidden !important;
+            }
+            .dm-email-select-wrap { position: relative; width: 100%; min-width: 0; }
+            .dm-email-select-button {
+                position: relative;
+                width: 100%;
+                min-height: 38px;
+                display: flex;
+                align-items: center;
+                border: 1px solid rgba(91,156,255,.52);
+                border-radius: 7px;
+                background: rgba(14,24,34,.76);
+                color: #d7e0e8;
+                padding: 8px 34px 8px 10px;
+                font-size: 10.5px;
+                text-align: left;
+                cursor: pointer;
+                outline: none;
+                box-sizing: border-box;
+                transition: border-color .14s ease, background .14s ease, border-radius .14s ease;
+            }
+            .dm-email-select-button::after {
+                content: "";
+                position: absolute;
+                right: 14px;
+                top: 50%;
+                width: 6px;
+                height: 6px;
+                border-right: 1.5px solid #7fb2ff;
+                border-bottom: 1.5px solid #7fb2ff;
+                transform: translateY(-25%) rotate(225deg);
+                transition: transform .14s ease;
+            }
+            .dm-email-select-wrap.open .dm-email-select-button {
+                border-color: rgba(91,156,255,.72);
+                border-top-color: transparent;
+                border-radius: 0 0 7px 7px;
+                background: rgba(27,47,67,.94);
+            }
+            .dm-email-select-wrap.open .dm-email-select-button::after {
+                transform: translateY(-65%) rotate(45deg);
+            }
+            .dm-email-select-button:focus,
+            .dm-email-select-button:focus-visible {
+                border-color: rgba(91,156,255,.72);
+                box-shadow: 0 0 0 1px rgba(91,156,255,.14);
+            }
+            .dm-email-select-menu {
+                display: none;
+                position: absolute;
+                z-index: 80;
+                left: 0;
+                right: 0;
+                bottom: calc(100% - 1px);
+                max-height: 184px;
+                overflow-y: auto;
+                overflow-x: hidden;
+                border: 1px solid rgba(91,156,255,.72);
+                border-bottom: 0;
+                border-radius: 7px 7px 0 0;
+                background: #1b2f43;
+                box-shadow: 0 -12px 24px rgba(0,0,0,.28);
+                scrollbar-width: thin;
+                scrollbar-color: rgba(91,156,255,.55) rgba(14,24,34,.35);
+            }
+            .dm-email-select-menu::-webkit-scrollbar { width: 6px; }
+            .dm-email-select-menu::-webkit-scrollbar-track { background: rgba(14,24,34,.35); }
+            .dm-email-select-menu::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(91,156,255,.55); }
+            .dm-email-select-wrap.open .dm-email-select-menu { display: block; }
+            .dm-email-select-wrap.open { z-index: 90; }
+            .dm-email-select-option {
+                width: 100%;
+                min-height: 30px;
+                display: flex;
+                align-items: center;
+                border: 0;
+                border-top: 1px solid rgba(42,58,74,.42);
+                background: transparent;
+                color: #b8d1ff;
+                padding: 7px 10px;
+                font-size: 10px;
+                text-align: left;
+                cursor: pointer;
+            }
+            .dm-email-select-option:first-child { border-top: 0; }
+            .dm-email-select-option:hover,
+            .dm-email-select-option.active { background: rgba(91,156,255,.18); color: #e0edff; }
             .dm-email-events {
                 margin-top: 16px; padding: 13px 14px 10px; border: 1px solid rgba(82,105,127,.48);
                 border-radius: 10px; background: rgba(13,21,29,.52);
@@ -349,7 +488,7 @@
                 .dm-email-dialog { width: 100%; max-height: 96vh; }
                 .dm-email-head { padding: 14px; grid-template-columns: 40px minmax(0,1fr) 36px; }
                 .dm-email-body { padding: 14px; }
-                .dm-email-grid, .dm-email-event-grid, .dm-email-address-row { grid-template-columns: 1fr; }
+                .dm-email-grid, .dm-email-event-grid, .dm-email-address-row, .dm-email-preferences-row { grid-template-columns: 1fr; }
                 .dm-email-actions { flex-wrap: wrap; }
                 .dm-email-action { flex: 1 1 auto; }
             }
@@ -376,6 +515,124 @@
         button.addEventListener("click", openDialog);
         smartButton.parentElement.insertBefore(button, smartButton);
         translateUi();
+    }
+
+    const REPORT_OPTIONS = [
+        ["off", "reportOff"],
+        ["weekly", "reportWeekly"],
+        ["monthly", "reportMonthly"],
+        ["3_months", "report3Months"],
+        ["6_months", "report6Months"],
+        ["9_months", "report9Months"],
+        ["yearly", "reportYearly"]
+    ];
+    const TEMPERATURE_OPTIONS_C = [80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30];
+
+    function currentTemperatureUnit() {
+        return localStorage.getItem("diskMonitorTemperatureUnit") === "fahrenheit" ? "fahrenheit" : "celsius";
+    }
+
+    function temperatureOptionLabel(valueC) {
+        const value = Number(valueC);
+        return currentTemperatureUnit() === "fahrenheit"
+            ? `${Math.round((value * 9 / 5) + 32)} °F`
+            : `${value} °C`;
+    }
+
+    function reportOptionLabel(value) {
+        const match = REPORT_OPTIONS.find(item => item[0] === String(value));
+        return match ? text(match[1]) : String(value || "");
+    }
+
+    function selectOptionLabel(selectId, option) {
+        const value = String(option.value || "");
+        if (selectId === "dmEmailLanguage") return value === "auto" ? text("autoLanguage") : option.textContent;
+        if (selectId === "dmReport") return reportOptionLabel(value);
+        if (selectId === "dmTemperatureLimit") return temperatureOptionLabel(value);
+        return option.textContent;
+    }
+
+    function closeCustomSelects(exceptId = "") {
+        let changed = false;
+        document.querySelectorAll(".dm-email-select-wrap.open").forEach(wrap => {
+            if (exceptId && wrap.id === exceptId) return;
+            wrap.classList.remove("open");
+            const button = wrap.querySelector(".dm-email-select-button");
+            if (button) button.setAttribute("aria-expanded", "false");
+            changed = true;
+        });
+        return changed;
+    }
+
+    function syncCustomSelect(selectId) {
+        const select = document.getElementById(selectId);
+        const wrap = document.getElementById(selectId + "Custom");
+        if (!select || !wrap) return;
+        const button = wrap.querySelector(".dm-email-select-button");
+        const menu = wrap.querySelector(".dm-email-select-menu");
+        if (!button || !menu) return;
+
+        menu.innerHTML = "";
+        Array.from(select.options).forEach(option => {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "dm-email-select-option" + (option.value === select.value ? " active" : "");
+            item.setAttribute("role", "option");
+            item.setAttribute("aria-selected", option.value === select.value ? "true" : "false");
+            item.textContent = selectOptionLabel(selectId, option);
+            item.addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                select.value = option.value;
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+                syncCustomSelect(selectId);
+                closeCustomSelects();
+            });
+            menu.appendChild(item);
+        });
+
+        const selected = select.options[select.selectedIndex] || select.options[0];
+        button.textContent = selected ? selectOptionLabel(selectId, selected) : "";
+    }
+
+    function enhanceCustomSelect(selectId) {
+        const select = document.getElementById(selectId);
+        if (!select || document.getElementById(selectId + "Custom")) return;
+        select.classList.add("dm-email-native-select");
+
+        const wrap = document.createElement("div");
+        wrap.className = "dm-email-select-wrap";
+        wrap.id = selectId + "Custom";
+        wrap.innerHTML = `
+            <button class="dm-email-select-button" type="button" aria-haspopup="listbox" aria-expanded="false"></button>
+            <div class="dm-email-select-menu" role="listbox"></div>
+        `;
+        select.insertAdjacentElement("afterend", wrap);
+
+        const button = wrap.querySelector(".dm-email-select-button");
+        button.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            const willOpen = !wrap.classList.contains("open");
+            closeCustomSelects(wrap.id);
+            wrap.classList.toggle("open", willOpen);
+            button.setAttribute("aria-expanded", willOpen ? "true" : "false");
+            if (willOpen) {
+                const active = wrap.querySelector(".dm-email-select-option.active");
+                if (active) active.scrollIntoView({ block: "nearest" });
+            }
+        });
+
+        select.addEventListener("change", () => syncCustomSelect(selectId));
+        syncCustomSelect(selectId);
+    }
+
+    function normalizeTemperatureThreshold(value) {
+        const numeric = Number(value);
+        if (TEMPERATURE_OPTIONS_C.includes(numeric)) return numeric;
+        return TEMPERATURE_OPTIONS_C.reduce((best, candidate) => (
+            Math.abs(candidate - numeric) < Math.abs(best - numeric) ? candidate : best
+        ), 55);
     }
 
     function createOverlay() {
@@ -407,8 +664,11 @@
                             <div class="dm-email-field"><label for="dmSender" id="dmSenderLabel"></label><input id="dmSender" type="email" autocomplete="off"></div>
                             <div class="dm-email-field"><label for="dmRecipient" id="dmRecipientLabel"></label><input id="dmRecipient" type="email" autocomplete="off"></div>
                         </div>
-                        <div class="dm-email-field"><label for="dmEmailLanguage" id="dmEmailLanguageLabel"></label><select id="dmEmailLanguage"><option value="auto"></option><option value="de">Deutsch</option><option value="en">English</option><option value="fr">Français</option><option value="pt">Português</option><option value="es">Español</option></select></div>
-                        <div class="dm-email-field"><label for="dmTemperatureLimit" id="dmTemperatureLimitLabel"></label><input id="dmTemperatureLimit" type="number" min="35" max="90" inputmode="numeric"></div>
+                        <div class="dm-email-preferences-row">
+                            <div class="dm-email-field"><label for="dmEmailLanguage" id="dmEmailLanguageLabel"></label><select id="dmEmailLanguage"><option value="auto"></option><option value="de">Deutsch</option><option value="en">English</option><option value="fr">Français</option><option value="pt">Português</option><option value="es">Español</option></select></div>
+                            <div class="dm-email-field"><label for="dmReport" id="dmReportLabel"></label><select id="dmReport"><option value="off"></option><option value="weekly"></option><option value="monthly"></option><option value="3_months"></option><option value="6_months"></option><option value="9_months"></option><option value="yearly"></option></select></div>
+                            <div class="dm-email-field"><label for="dmTemperatureLimit" id="dmTemperatureLimitLabel"></label><select id="dmTemperatureLimit"><option value="80">80</option><option value="75">75</option><option value="70">70</option><option value="65">65</option><option value="60">60</option><option value="55">55</option><option value="50">50</option><option value="45">45</option><option value="40">40</option><option value="35">35</option><option value="30">30</option></select></div>
+                        </div>
                     </div>
                     <div class="dm-email-events">
                         <div class="dm-email-section-title" id="dmEmailEventsTitle"></div>
@@ -434,8 +694,22 @@
         document.getElementById("dmEmailCancel").addEventListener("click", closeDialog);
         document.getElementById("dmEmailSave").addEventListener("click", () => saveSettings(false));
         document.getElementById("dmEmailTest").addEventListener("click", sendTest);
-        overlay.addEventListener("click", event => { if (event.target === overlay) closeDialog(); });
-        document.addEventListener("keydown", event => { if (event.key === "Escape" && overlay.classList.contains("visible")) closeDialog(); });
+        enhanceCustomSelect("dmEmailLanguage");
+        enhanceCustomSelect("dmReport");
+        enhanceCustomSelect("dmTemperatureLimit");
+        overlay.addEventListener("click", event => {
+            if (event.target === overlay) closeDialog();
+            else if (!event.target.closest(".dm-email-select-wrap")) closeCustomSelects();
+        });
+        document.addEventListener("keydown", event => {
+            if (event.key !== "Escape" || !overlay.classList.contains("visible")) return;
+            if (closeCustomSelects()) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            closeDialog();
+        });
         translateUi();
     }
 
@@ -446,7 +720,7 @@
             dmEmailTitle: "title", dmEmailIntro: "intro", dmEmailEnabledLabel: "enabled",
             dmSmtpHostLabel: "smtpServer", dmSmtpPortLabel: "smtpPort", dmEncryptionLabel: "encryption",
             dmSmtpUsernameLabel: "username", dmSmtpPasswordLabel: "password", dmSenderLabel: "sender",
-            dmRecipientLabel: "recipient", dmEmailLanguageLabel: "emailLanguage", dmTemperatureLimitLabel: "temperatureLimit",
+            dmRecipientLabel: "recipient", dmEmailLanguageLabel: "emailLanguage", dmReportLabel: "report", dmTemperatureLimitLabel: "temperatureLimit",
             dmEmailEventsTitle: "events", dmNotifySmartHealthLabel: "smartHealth", dmNotifySmartAttributesLabel: "smartAttributes",
             dmNotifyMissingDriveLabel: "missingDrive", dmNotifyRaidLabel: "raid", dmNotifyTemperatureLabel: "temperature",
             dmNotifyRecoveryLabel: "recovery", dmEmailTest: "test", dmEmailCancel: "close", dmEmailSave: "save"
@@ -461,6 +735,9 @@
         if (none) none.textContent = text("none");
         const password = document.getElementById("dmSmtpPassword");
         if (password && settings && settings.password_set) password.placeholder = text("passwordSaved");
+        syncCustomSelect("dmEmailLanguage");
+        syncCustomSelect("dmReport");
+        syncCustomSelect("dmTemperatureLimit");
         updateButtonState(settings);
     }
 
@@ -501,7 +778,8 @@
         set("dmSender", value.sender);
         set("dmRecipient", value.recipient);
         set("dmEmailLanguage", value.language || "auto");
-        set("dmTemperatureLimit", value.temperature_threshold_c || 55);
+        set("dmReport", value.report_interval || "off");
+        set("dmTemperatureLimit", normalizeTemperatureThreshold(value.temperature_threshold_c || 55));
         check("dmNotifySmartHealth", value.notify_smart_health);
         check("dmNotifySmartAttributes", value.notify_smart_attributes);
         check("dmNotifyMissingDrive", value.notify_missing_drive);
@@ -510,6 +788,9 @@
         check("dmNotifyRecovery", value.notify_recovery);
         const password = document.getElementById("dmSmtpPassword");
         if (password) password.placeholder = value.password_set ? text("passwordSaved") : text("noPassword");
+        syncCustomSelect("dmEmailLanguage");
+        syncCustomSelect("dmReport");
+        syncCustomSelect("dmTemperatureLimit");
         updateButtonState(value);
     }
 
@@ -520,7 +801,9 @@
             enabled: checked("dmEmailEnabled"), smtp_host: value("dmSmtpHost").trim(),
             smtp_port: Number(value("dmSmtpPort") || 587), encryption: value("dmEncryption"),
             username: value("dmSmtpUsername").trim(), sender: value("dmSender").trim(), recipient: value("dmRecipient").trim(),
-            language: value("dmEmailLanguage"), temperature_threshold_c: Number(value("dmTemperatureLimit") || 55),
+            language: value("dmEmailLanguage"), temperature_unit: currentTemperatureUnit(),
+            temperature_threshold_c: Number(value("dmTemperatureLimit") || 55),
+            report_interval: value("dmReport"),
             notify_smart_health: checked("dmNotifySmartHealth"), notify_smart_attributes: checked("dmNotifySmartAttributes"),
             notify_missing_drive: checked("dmNotifyMissingDrive"), notify_raid: checked("dmNotifyRaid"),
             notify_temperature: checked("dmNotifyTemperature"), notify_recovery: checked("dmNotifyRecovery")
@@ -593,7 +876,10 @@
         const lang = language();
         try {
             await request("/api/email-notifications/ui-language", {
-                method: "POST", body: JSON.stringify({ language: lang })
+                method: "POST", body: JSON.stringify({
+                    language: lang,
+                    temperature_unit: currentTemperatureUnit()
+                })
             });
         } catch (_) {}
     }
@@ -613,6 +899,7 @@
         if (busy) return;
         const overlay = document.getElementById("dmEmailOverlay");
         if (!overlay) return;
+        closeCustomSelects();
         overlay.classList.remove("visible");
         overlay.setAttribute("aria-hidden", "true");
     }
@@ -634,6 +921,16 @@
 
         const languageSelect = document.getElementById("languageSelect");
         if (languageSelect) languageSelect.addEventListener("change", () => setTimeout(syncUiLanguage, 0));
+
+        const temperatureUnitSelect = document.getElementById("temperatureUnitSelect");
+        if (temperatureUnitSelect) {
+            temperatureUnitSelect.addEventListener("change", () => {
+                setTimeout(() => {
+                    syncCustomSelect("dmTemperatureLimit");
+                    syncUiLanguage();
+                }, 0);
+            });
+        }
     }
 
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });

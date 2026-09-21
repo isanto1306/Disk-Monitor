@@ -18,6 +18,7 @@ COPY app/entrypoint.py /app/entrypoint.py
 COPY app/entrypoint_header_stable.py /app/entrypoint_header_stable.py
 COPY app/email_notifications.py /app/email_notifications.py
 COPY static/ /app/static/
+RUN python -m py_compile /app/main.py /app/entrypoint.py /app/entrypoint_header_stable.py /app/email_notifications.py
 RUN mkdir -p /app/cache
 
 EXPOSE 8999

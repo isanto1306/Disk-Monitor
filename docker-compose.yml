@@ -64,7 +64,7 @@ x-casaos:
   category: Utilities
   architectures:
     - amd64
-  version: "0.32.89"
+  version: "0.32.90"
   update_at: "2026-09-20"
   repo: https://github.com/isanto1306/Disk-Monitor
   support: https://github.com/isanto1306/Disk-Monitor/issues
