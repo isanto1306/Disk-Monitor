@@ -450,7 +450,7 @@
                 background: #0d151d;
                 color: #d7e0e8;
                 padding: 8px 34px 8px 10px;
-                font-size: 10.5px;
+                font-size: 12px;
                 text-align: left;
                 cursor: pointer;
                 outline: none;
@@ -494,7 +494,7 @@
                 overflow-y: auto;
                 overflow-x: hidden;
                 border: 1px solid rgba(91,156,255,.72);
-                border-bottom: 0;
+                border-bottom: 1px solid rgba(91,156,255,.52);
                 border-radius: 7px 7px 0 0;
                 background: #0d151d;
                 box-shadow: 0 -12px 24px rgba(0,0,0,.28);
@@ -512,11 +512,11 @@
                 display: flex;
                 align-items: center;
                 border: 0;
-                border-top: 1px solid rgba(91,156,255,.24);
+                border-top: 1px solid rgba(91,156,255,.42);
                 background: transparent;
                 color: #b8d1ff;
                 padding: 7px 10px;
-                font-size: 10px;
+                font-size: 11.5px;
                 text-align: left;
                 cursor: pointer;
             }
