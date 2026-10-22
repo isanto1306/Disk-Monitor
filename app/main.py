@@ -284,9 +284,9 @@ DISK_ACTIVITY_STATE_SAVE_SECONDS = 5.0
 # Sleeping/inactive/unknown HDDs are served strictly from cache.
 STORAGE_USAGE_REFRESH_SECONDS = 30.0
 
-# Normal monitoring must never fall back to automatic hdparm/smartctl HDD
-# power probes. On ZimaOS we use the local-storage API. If that API is not
-# available, normal monitoring remains passive.
+# Generic fallback probing remains disabled. Direct SATA/SAS HDDs use only
+# the dedicated cached smartctl -n standby power-mode check above; USB normal
+# monitoring stays fully passive.
 ALLOW_AUTOMATIC_HDD_POWER_PROBES = False
 
 # SMART history remains no-wake for mechanical HDDs.
@@ -5451,10 +5451,9 @@ def probe_smartctl_power_state_once(
     preferred_device_type=None
 ):
 
-    # This function is used only for:
-    # - the single initial probe after service start
-    # - explicit manual actions that call it directly elsewhere.
-    # It is never called by a periodic timer.
+    # USB calls remain explicit/manual. Direct SATA/SAS dashboard checks may
+    # also use this helper through a time-limited cache so IDLE_A/IDLE_B are
+    # not confused with real STANDBY.
 
     candidates = []
 
@@ -5569,7 +5568,7 @@ def probe_smartctl_power_state_once(
         else:
 
             idle_match = re.search(
-                r"(?:device is in|power mode(?: is)?:)\\s*(idle_[abc])(?:\\s+mode)?",
+                r"(?:device is in|power mode(?: is)?:)\s*(idle_[abc])(?:\s+mode)?",
                 output
             )
 
