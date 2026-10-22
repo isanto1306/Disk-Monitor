@@ -268,6 +268,11 @@ PROCESS_ACCESS_DISK_IO_HOLD_SECONDS = 8.0
 
 USB_HDD_ACTIVE_HOLD_SECONDS = 10.0
 
+# Direct SATA/SAS HDD power-state checks use smartctl -n standby, which
+# does not spin up a drive that is already in standby. Cache the result so
+# normal dashboard refreshes do not repeatedly query the same drive.
+DIRECT_HDD_POWER_VERIFY_TTL_SECONDS = 30.0
+
 DISK_ACTIVITY_STATE_SAVE_SECONDS = 5.0
 
 # Filesystem capacity is refreshed every 30 seconds and cached.
@@ -330,6 +335,11 @@ power_smartctl_type_cache = {}
 # Explicitly confirmed USB HDD runtime states. Normal passive monitoring
 # never queries the USB bridge. Real I/O overrides these states immediately.
 usb_runtime_power_state = {}
+
+# Confirmed direct SATA/SAS HDD power states. These are deliberately kept
+# separate from the USB runtime state because IDLE_A/IDLE_B must never be
+# mistaken for real standby.
+direct_hdd_power_state_cache = {}
 
 # Per-drive expected automatic standby timers. Stored by stable disk identity.
 # Example: {"by-id:usb-WD_...": {"minutes": 30}}
@@ -3106,6 +3116,13 @@ def update_disk_activity(
 
     if active:
 
+        # Real block I/O means any cached direct-HDD power state is stale.
+        # The next dashboard power-state read will re-check the hardware.
+        direct_hdd_power_state_cache.pop(
+            device,
+            None
+        )
+
         last_activity = now_iso
         idle_since = None
 
@@ -4384,6 +4401,11 @@ async def monitor_disks():
                 None
             )
 
+            direct_hdd_power_state_cache.pop(
+                device,
+                None
+            )
+
 
         await asyncio.sleep(
             INTERVAL
@@ -5358,6 +5380,72 @@ def clear_usb_runtime_power_state(
     )
 
 
+def get_direct_hdd_power_state(
+    device,
+    force=False
+):
+
+    now = time.monotonic()
+
+    cached = direct_hdd_power_state_cache.get(
+        device
+    )
+
+    if (
+        not force
+        and isinstance(
+            cached,
+            dict
+        )
+        and (
+            now
+            - cached.get(
+                "updated_at_monotonic",
+                0
+            )
+        ) < DIRECT_HDD_POWER_VERIFY_TTL_SECONDS
+    ):
+
+        result = cached.get(
+            "result"
+        )
+
+        if isinstance(
+            result,
+            dict
+        ):
+
+            return dict(
+                result
+            )
+
+    result = probe_smartctl_power_state_once(
+        device
+    )
+
+    if result.get(
+        "available"
+    ):
+
+        direct_hdd_power_state_cache[
+            device
+        ] = {
+            "result": dict(
+                result
+            ),
+            "updated_at_monotonic": now
+        }
+
+    elif force:
+
+        direct_hdd_power_state_cache.pop(
+            device,
+            None
+        )
+
+    return result
+
+
 def probe_smartctl_power_state_once(
     device,
     preferred_device_type=None
@@ -5435,8 +5523,7 @@ def probe_smartctl_power_state_once(
         command = [
             "smartctl",
             "-n",
-            "standby",
-            "-i"
+            "standby"
         ]
 
         if device_type:
@@ -5463,6 +5550,7 @@ def probe_smartctl_power_state_once(
         )
 
         status = None
+        power_mode = None
 
         if (
             "device is in standby mode"
@@ -5476,21 +5564,41 @@ def probe_smartctl_power_state_once(
         ):
 
             status = "STANDBY"
+            power_mode = "STANDBY"
 
-        elif (
-            "power mode is: active or idle"
-            in output
-            or "device is active or idle"
-            in output
-            or "power mode is: active/idle"
-            in output
-            or "power mode is: active"
-            in output
-            or "power mode is: idle"
-            in output
-        ):
+        else:
 
-            status = "ACTIVE"
+            idle_match = re.search(
+                r"(?:device is in|power mode(?: is)?:)\\s*(idle_[abc])(?:\\s+mode)?",
+                output
+            )
+
+            if idle_match:
+
+                status = "ACTIVE"
+                power_mode = (
+                    idle_match.group(
+                        1
+                    ).upper()
+                )
+
+            elif (
+                "power mode is: active or idle"
+                in output
+                or "device is active or idle"
+                in output
+                or "device is in active or idle mode"
+                in output
+                or "power mode is: active/idle"
+                in output
+                or "power mode is: active"
+                in output
+                or "power mode is: idle"
+                in output
+            ):
+
+                status = "ACTIVE"
+                power_mode = "ACTIVE_OR_IDLE"
 
         if status is None:
             continue
@@ -5512,16 +5620,30 @@ def probe_smartctl_power_state_once(
             )
         )
 
-        set_usb_runtime_power_state(
-            device,
-            status,
-            method,
-            device_type=device_type
+        device_sys_path = (
+            SYS_BLOCK
+            / device
         )
+
+        if (
+            get_device_transport(
+                device,
+                device_sys_path
+            )
+            == "usb"
+        ):
+
+            set_usb_runtime_power_state(
+                device,
+                status,
+                method,
+                device_type=device_type
+            )
 
         return {
             "available": True,
             "status": status,
+            "power_mode": power_mode,
             "device_type":
                 device_type,
             "method": method
@@ -5530,6 +5652,7 @@ def probe_smartctl_power_state_once(
     return {
         "available": False,
         "status": None,
+        "power_mode": None,
         "device_type": None,
         "method": "smartctl-unresolved"
     }
@@ -5664,15 +5787,8 @@ def check_power_state(
             ) == "ACTIVE"
         )
 
-        has_process_access = bool(
-            get_current_process_access(
-                device
-            )
-        )
-
         if (
             has_live_io
-            or has_process_access
             or activity_is_recent(
                 activity,
                 USB_HDD_ACTIVE_HOLD_SECONDS
@@ -5799,27 +5915,94 @@ def check_power_state(
         "UNKNOWN"
     ):
 
-        zimaos_state = get_zimaos_standby(
+        # Real block I/O is definitive proof that the disk is awake.
+        if activity.get(
+            "status"
+        ) == "ACTIVE":
+
+            direct_hdd_power_state_cache.pop(
+                device,
+                None
+            )
+
+            return {
+                "status": "ACTIVE",
+                "method": "io",
+                "confidence": "confirmed",
+                "last_checked": last_checked
+            }
+
+        # ZimaOS 1.8.0 can report standby before an ATA drive has actually
+        # reached STANDBY (for example while smartctl still reports IDLE_A
+        # or IDLE_B). Use the drive's own no-wake CHECK POWER MODE result as
+        # the authoritative state.
+        smart_power = get_direct_hdd_power_state(
             device
         )
 
-        if zimaos_state.get(
+        if smart_power.get(
             "available"
         ):
 
             return {
-                "status": (
-                    "STANDBY"
-                    if zimaos_state.get(
-                        "standby"
-                    )
-                    else "ACTIVE"
-                ),
+                "status":
+                    smart_power.get(
+                        "status"
+                    ),
+                "method":
+                    smart_power.get(
+                        "method"
+                    ),
+                "confidence": "confirmed",
+                "ata_power_mode":
+                    smart_power.get(
+                        "power_mode"
+                    ),
+                "last_checked":
+                    last_checked
+            }
+
+        # If smartctl cannot resolve this drive, ZimaOS may still prove that
+        # it is awake. A ZimaOS standby=true response is intentionally NOT
+        # accepted as proof of physical standby.
+        zimaos_state = get_zimaos_standby(
+            device
+        )
+
+        if (
+            zimaos_state.get(
+                "available"
+            )
+            and zimaos_state.get(
+                "standby"
+            ) is False
+        ):
+
+            return {
+                "status": "ACTIVE",
                 "method":
                     zimaos_state.get(
                         "method"
                     ),
-                "confidence": "confirmed",
+                "confidence": "observed",
+                "last_checked":
+                    last_checked
+            }
+
+        if (
+            zimaos_state.get(
+                "available"
+            )
+            and zimaos_state.get(
+                "standby"
+            ) is True
+        ):
+
+            return {
+                "status": "UNKNOWN_IDLE",
+                "method":
+                    "zimaos-local-storage-unverified",
+                "confidence": "unknown",
                 "last_checked":
                     last_checked
             }
@@ -8986,66 +9169,42 @@ def verify_disk_standby(
             force=True
         )
 
-        if smart_power.get(
-            "available"
-        ):
+    else:
 
-            return {
-                "verified": (
-                    smart_power.get(
-                        "status"
-                    )
-                    == "STANDBY"
-                ),
-                "method":
-                    smart_power.get(
-                        "method"
-                    )
-            }
-
-    zimaos_state = get_zimaos_standby(
-        device
-    )
-
-    if (
-        zimaos_state.get(
-            "available"
+        smart_power = get_direct_hdd_power_state(
+            device,
+            force=True
         )
-        and zimaos_state.get(
-            "standby"
-        )
+
+    if smart_power.get(
+        "available"
     ):
 
         return {
-            "verified": True,
-            "method": "zimaos-local-storage"
+            "verified": (
+                smart_power.get(
+                    "status"
+                )
+                == "STANDBY"
+            ),
+            "method":
+                smart_power.get(
+                    "method"
+                ),
+            "status":
+                smart_power.get(
+                    "status"
+                ),
+            "power_mode":
+                smart_power.get(
+                    "power_mode"
+                )
         }
 
-    if transport != "usb":
-
-        smart_power = get_smartctl_power_state(
-            device,
-            preferred_device_type=
-                preferred_smartctl_type
-        )
-
-        if (
-            smart_power.get(
-                "available"
-            )
-            and smart_power.get(
-                "status"
-            ) == "STANDBY"
-        ):
-
-            return {
-                "verified": True,
-                "method":
-                    smart_power.get(
-                        "method"
-                    )
-            }
-
+    # Only use hdparm as a compatibility fallback when smartctl cannot
+    # determine the ATA power state at all. If smartctl reports IDLE_A,
+    # IDLE_B or ACTIVE, that result is authoritative and must not be
+    # overridden by the less precise hdparm state.
     result = run_command(
         [
             "hdparm",
@@ -9069,14 +9228,17 @@ def verify_disk_standby(
 
         return {
             "verified": True,
-            "method": "hdparm"
+            "method": "hdparm-fallback",
+            "status": "STANDBY",
+            "power_mode": None
         }
 
     return {
         "verified": False,
-        "method": None
+        "method": None,
+        "status": None,
+        "power_mode": None
     }
-
 
 def try_smartctl_standby(
     device
@@ -9152,59 +9314,37 @@ def put_hdd_in_standby(
         device_path
     )
 
-    if transport == "usb":
+    current_power = verify_disk_standby(
+        device
+    )
 
-        current_power = get_usb_runtime_power_state(
-            device
-        )
+    if current_power.get(
+        "verified"
+    ):
 
-        if (
-            current_power is not None
-            and current_power.get(
-                "status"
-            ) == "STANDBY"
-        ):
-
-            return {
-                "success": True,
-                "already_standby": True,
-                "verified": True,
-                "standby_method": None,
-                "verification_method":
-                    current_power.get(
-                        "method"
-                    )
-            }
-
-    else:
-
-        current_power = get_zimaos_standby(
-            device
-        )
-
-        if (
-            current_power.get(
-                "available"
-            )
-            and current_power.get(
-                "standby"
-            )
-        ):
-
-            return {
-                "success": True,
-                "already_standby": True,
-                "verified": True,
-                "standby_method": None,
-                "verification_method":
-                    "zimaos-local-storage"
-            }
+        return {
+            "success": True,
+            "already_standby": True,
+            "verified": True,
+            "standby_method": None,
+            "verification_method":
+                current_power.get(
+                    "method"
+                )
+        }
 
     cached_access = get_current_process_access(
         device
     )
 
-    if cached_access:
+    # USB process/path attribution is informational only. A process can keep
+    # a file descriptor open on a USB filesystem while its actual I/O happens
+    # elsewhere, so it must not by itself block standby. The immediate block
+    # counter check below remains the authoritative busy test.
+    if (
+        cached_access
+        and transport != "usb"
+    ):
 
         return {
             "success": False,
