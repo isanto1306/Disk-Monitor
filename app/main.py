@@ -4620,6 +4620,11 @@ async def monitor_disks():
                 None
             )
 
+            display_process_access.pop(
+                device,
+                None
+            )
+
             power_smartctl_type_cache.pop(
                 device,
                 None
