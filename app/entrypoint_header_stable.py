@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.40"
-entrypoint.main.app.version = "0.22.40"
+app.version = "0.22.41"
+entrypoint.main.app.version = "0.22.41"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -333,14 +333,14 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.101"',
+        '"v0.32.102"',
         1,
     )
 
-    if 'email-notifications.js?v=0.32.101' not in entrypoint._index_html:
+    if 'email-notifications.js?v=0.32.102' not in entrypoint._index_html:
         entrypoint._index_html = entrypoint._index_html.replace(
             '</body>',
-            '<script src="/email-notifications.js?v=0.32.101"></script>\n</body>',
+            '<script src="/email-notifications.js?v=0.32.102"></script>\n</body>',
             1,
         )
     entrypoint._index_html = entrypoint._index_html.replace(
