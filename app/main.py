@@ -322,6 +322,7 @@ smart_automation_pending = {}
 
 process_io_previous = {}
 current_process_access = {}
+display_process_access = {}
 
 # Successful smartctl device mode per USB HDD.
 # "__auto__" means no explicit -d option is required.
@@ -3694,6 +3695,7 @@ def update_process_access():
 
     global process_io_previous
     global current_process_access
+    global display_process_access
 
     if not HOST_PROC.exists():
         return
@@ -3759,6 +3761,14 @@ def update_process_access():
                 "write_bytes",
                 0
             ),
+            "rchar": io_values.get(
+                "rchar",
+                0
+            ),
+            "wchar": io_values.get(
+                "wchar",
+                0
+            ),
             "time": now
         }
 
@@ -3798,10 +3808,42 @@ def update_process_access():
             )
         )
 
-        if (
-            read_delta <= 0
-            and write_delta <= 0
-        ):
+        rchar_delta = max(
+            0,
+            io_values.get(
+                "rchar",
+                0
+            )
+            - previous.get(
+                "rchar",
+                0
+            )
+        )
+
+        wchar_delta = max(
+            0,
+            io_values.get(
+                "wchar",
+                0
+            )
+            - previous.get(
+                "wchar",
+                0
+            )
+        )
+
+        has_physical_io = (
+            read_delta > 0
+            or write_delta > 0
+        )
+
+        has_process_io = (
+            has_physical_io
+            or rchar_delta > 0
+            or wchar_delta > 0
+        )
+
+        if not has_process_io:
             continue
 
         fd_targets = (
@@ -3815,40 +3857,124 @@ def update_process_access():
         if not fd_targets:
             continue
 
-        if (
-            read_delta > 0
-            and write_delta > 0
-        ):
-
-            operation = (
-                "READ_WRITE"
-            )
-
-        elif write_delta > 0:
-
-            operation = (
-                "WRITE"
-            )
-
-        else:
-
-            operation = (
-                "READ"
-            )
-
         process_name = (
             read_process_name(
                 pid_path
             )
         )
 
+        # Keep the original 0.32.99 current_process_access behavior exactly
+        # for standby/safety logic: only physical read_bytes/write_bytes
+        # deltas can populate this cache.
+        if has_physical_io:
+
+            if (
+                read_delta > 0
+                and write_delta > 0
+            ):
+
+                operation = (
+                    "READ_WRITE"
+                )
+
+            elif write_delta > 0:
+
+                operation = (
+                    "WRITE"
+                )
+
+            else:
+
+                operation = (
+                    "READ"
+                )
+
+            for (
+                device,
+                paths
+            ) in fd_targets.items():
+
+                bucket = (
+                    current_process_access.setdefault(
+                        device,
+                        {}
+                    )
+                )
+
+                for target in paths:
+
+                    key = (
+                        f"{pid}\\x00"
+                        f"{target}"
+                    )
+
+                    bucket[
+                        key
+                    ] = {
+                        "pid": int(
+                            pid
+                        ),
+                        "process": process_name,
+                        "path": target,
+                        "operation": operation,
+                        "read_bytes_per_sec": round(
+                            read_delta
+                            / elapsed,
+                            2
+                        ),
+                        "write_bytes_per_sec": round(
+                            write_delta
+                            / elapsed,
+                            2
+                        ),
+                        "last_seen_epoch": now,
+                        "last_seen": datetime.now(
+                            timezone.utc
+                        ).isoformat()
+                    }
+
+        # Dashboard-only attribution also watches rchar/wchar. These counters
+        # move when an application performs buffered read/write syscalls, often
+        # while the file descriptor is still open. Physical write_bytes may
+        # rise later during kernel writeback, after the descriptor has closed.
+        display_read_delta = max(
+            read_delta,
+            rchar_delta
+        )
+
+        display_write_delta = max(
+            write_delta,
+            wchar_delta
+        )
+
+        if (
+            display_read_delta > 0
+            and display_write_delta > 0
+        ):
+
+            display_operation = (
+                "READ_WRITE"
+            )
+
+        elif display_write_delta > 0:
+
+            display_operation = (
+                "WRITE"
+            )
+
+        else:
+
+            display_operation = (
+                "READ"
+            )
+
         for (
             device,
             paths
         ) in fd_targets.items():
 
-            bucket = (
-                current_process_access.setdefault(
+            display_bucket = (
+                display_process_access.setdefault(
                     device,
                     {}
                 )
@@ -3861,7 +3987,7 @@ def update_process_access():
                     f"{target}"
                 )
 
-                bucket[
+                display_bucket[
                     key
                 ] = {
                     "pid": int(
@@ -3869,14 +3995,15 @@ def update_process_access():
                     ),
                     "process": process_name,
                     "path": target,
-                    "operation": operation,
+                    "operation":
+                        display_operation,
                     "read_bytes_per_sec": round(
-                        read_delta
+                        display_read_delta
                         / elapsed,
                         2
                     ),
                     "write_bytes_per_sec": round(
-                        write_delta
+                        display_write_delta
                         / elapsed,
                         2
                     ),
@@ -3950,6 +4077,45 @@ def update_process_access():
         if not bucket:
 
             current_process_access.pop(
+                device,
+                None
+            )
+
+    # The display-only cache is intentionally short-lived. It may bridge
+    # buffered writeback, but it never participates in standby decisions.
+    for device in list(
+        display_process_access.keys()
+    ):
+
+        bucket = (
+            display_process_access[
+                device
+            ]
+        )
+
+        expired = [
+            key
+            for key, entry
+            in bucket.items()
+            if (
+                now
+                - entry.get(
+                    "last_seen_epoch",
+                    0
+                )
+            ) > PROCESS_ACCESS_DISK_IO_HOLD_SECONDS
+        ]
+
+        for key in expired:
+
+            bucket.pop(
+                key,
+                None
+            )
+
+        if not bucket:
+
+            display_process_access.pop(
                 device,
                 None
             )
@@ -4029,12 +4195,9 @@ def get_current_process_access_for_display(
     device
 ):
 
-    # Keep the original 0.32.99 process/FD tracking intact internally.
-    # For the dashboard, expose those candidates only while this exact
-    # physical disk has real block I/O. This prevents one process with open
-    # files on several disks from appearing on idle/standby disks, while still
-    # allowing the correct process/path to survive the one-cycle timing gap
-    # between /proc/<pid>/io and /sys/block/<dev>/stat sampling.
+    # Never show an access attribution on an idle/standby disk. This is the
+    # key protection against one process with open descriptors on many disks
+    # appearing everywhere at once.
     if (
         disk_activity.get(
             device,
@@ -4046,6 +4209,63 @@ def get_current_process_access_for_display(
     ):
         return []
 
+    now = time.time()
+
+    display_bucket = (
+        display_process_access.get(
+            device,
+            {}
+        )
+    )
+
+    entries = []
+
+    for entry in display_bucket.values():
+
+        if (
+            now
+            - entry.get(
+                "last_seen_epoch",
+                0
+            )
+        ) > PROCESS_ACCESS_DISK_IO_HOLD_SECONDS:
+            continue
+
+        item = dict(
+            entry
+        )
+
+        item.pop(
+            "last_seen_epoch",
+            None
+        )
+
+        entries.append(
+            item
+        )
+
+    entries.sort(
+        key=lambda item: (
+            item.get(
+                "last_seen",
+                ""
+            ),
+            item.get(
+                "process",
+                ""
+            )
+        ),
+        reverse=True
+    )
+
+    if entries:
+
+        return entries[
+            :MAX_ACCESS_ENTRIES_PER_DISK
+        ]
+
+    # Physical read_bytes/write_bytes attribution from 0.32.99 remains the
+    # final display fallback when it is available.
     return get_current_process_access(
         device
     )
