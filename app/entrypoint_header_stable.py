@@ -333,14 +333,14 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.102"',
+        '"v0.32.103"',
         1,
     )
 
-    if 'email-notifications.js?v=0.32.102' not in entrypoint._index_html:
+    if 'email-notifications.js?v=0.32.103' not in entrypoint._index_html:
         entrypoint._index_html = entrypoint._index_html.replace(
             '</body>',
-            '<script src="/email-notifications.js?v=0.32.102"></script>\n</body>',
+            '<script src="/email-notifications.js?v=0.32.103"></script>\n</body>',
             1,
         )
     entrypoint._index_html = entrypoint._index_html.replace(
