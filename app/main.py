@@ -3847,6 +3847,22 @@ def update_process_access():
             paths
         ) in fd_targets.items():
 
+            # /proc/<pid>/io reports I/O only at process level, not which
+            # open file descriptor caused it. Attribute the process/path only
+            # to a physical disk that had real block I/O in the same monitor
+            # interval. This prevents one process with open files on several
+            # disks from appearing as active on all of them.
+            if (
+                disk_activity.get(
+                    device,
+                    {}
+                ).get(
+                    "status"
+                )
+                != "ACTIVE"
+            ):
+                continue
+
             bucket = (
                 current_process_access.setdefault(
                     device,
