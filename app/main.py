@@ -3847,22 +3847,6 @@ def update_process_access():
             paths
         ) in fd_targets.items():
 
-            # /proc/<pid>/io reports I/O only at process level, not which
-            # open file descriptor caused it. Attribute the process/path only
-            # to a physical disk that had real block I/O in the same monitor
-            # interval. This prevents one process with open files on several
-            # disks from appearing as active on all of them.
-            if (
-                disk_activity.get(
-                    device,
-                    {}
-                ).get(
-                    "status"
-                )
-                != "ACTIVE"
-            ):
-                continue
-
             bucket = (
                 current_process_access.setdefault(
                     device,
@@ -4039,6 +4023,32 @@ def get_current_process_access(
     return entries[
         :MAX_ACCESS_ENTRIES_PER_DISK
     ]
+
+
+def get_current_process_access_for_display(
+    device
+):
+
+    # Keep the original 0.32.99 process/FD tracking intact internally.
+    # For the dashboard, expose those candidates only while this exact
+    # physical disk has real block I/O. This prevents one process with open
+    # files on several disks from appearing on idle/standby disks, while still
+    # allowing the correct process/path to survive the one-cycle timing gap
+    # between /proc/<pid>/io and /sys/block/<dev>/stat sampling.
+    if (
+        disk_activity.get(
+            device,
+            {}
+        ).get(
+            "status"
+        )
+        != "ACTIVE"
+    ):
+        return []
+
+    return get_current_process_access(
+        device
+    )
 
 
 # -------------------------------------------------
@@ -8842,7 +8852,7 @@ def get_disks():
                     activity_payload,
 
                 "current_access":
-                    get_current_process_access(
+                    get_current_process_access_for_display(
                         device
                     ),
 
