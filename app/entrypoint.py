@@ -38,6 +38,22 @@ ROOT_HTML_HEADER_SCROLLBAR_STYLE = r"""
 header {
     width: 100vw;
 }
+
+/*
+ * Comfortable disk cards keep the power/SMART footer pinned to the bottom
+ * of the equal-height card. Current Access may change above it without
+ * moving the footer. Compact and expanded access cards keep their existing
+ * layout behavior.
+ */
+.disk-card:not(.compact):not(.current-access-expanded) {
+    display: flex;
+    flex-direction: column;
+}
+
+.disk-card:not(.compact):not(.current-access-expanded)
+.disk-footer {
+    margin-top: auto;
+}
 </style>
 """
 
