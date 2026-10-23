@@ -1,0 +1,51 @@
+name: Cleanup GHCR after 0.32.99
+
+on:
+  push:
+    branches:
+      - cleanup-ghcr-after-099
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete package versions created from 0.32.100 onward
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cutoff="2026-10-22T06:20:00Z"
+          ids="$(
+            gh api --paginate               -H "Accept: application/vnd.github+json"               "/users/$OWNER/packages/container/disk-monitor/versions?per_page=100"             | jq -s --arg cutoff "$cutoff" 'add | .[] | select(.created_at >= $cutoff) | .id'
+          )"
+
+          if [ -z "$ids" ]; then
+            echo "No package versions found after cutoff."
+          else
+            while read -r id; do
+              [ -z "$id" ] && continue
+              echo "Deleting package version id=$id"
+              gh api --method DELETE                 -H "Accept: application/vnd.github+json"                 "/users/$OWNER/packages/container/disk-monitor/versions/$id"
+            done <<< "$ids"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Point latest back to existing 0.32.99 image
+        shell: bash
+        run: |
+          docker buildx imagetools create             --tag ghcr.io/${{ github.repository_owner }}/disk-monitor:latest             ghcr.io/${{ github.repository_owner }}/disk-monitor:0.32.99
