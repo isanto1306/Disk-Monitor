@@ -371,7 +371,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.104"',
+        '"v0.32.105"',
         1,
     )
 
@@ -434,7 +434,7 @@ if entrypoint._index_html is not None:
     )
 
     active_since_runtime_patch = r"""
-<style id="disk-monitor-active-since-v032104">
+<style id="disk-monitor-active-since-v032105">
 .dm-active-since-fallback {
     margin-left: 10px;
     color: #8290a3;
@@ -444,7 +444,7 @@ if entrypoint._index_html is not None:
     white-space: nowrap;
 }
 </style>
-<script id="disk-monitor-active-since-v032104">
+<script id="disk-monitor-active-since-v032105">
 (() => {
     const ACTIVE_REFRESH_MS = 5000;
 
@@ -679,14 +679,23 @@ if entrypoint._index_html is not None:
             return;
         }
 
+        const activeLabels = new Set(
+            [
+                "ACTIVE",
+                "AKTIV",
+                "ACTIF",
+                "ATIVO",
+                "ACTIVO"
+            ]
+        );
+
         const activeBadge = leafElements(
             footer
         ).find(
-            element => (
+            element => activeLabels.has(
                 String(
                     element.textContent || ""
                 ).trim().toUpperCase()
-                === "ACTIVE"
             )
         );
 
@@ -802,7 +811,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-active-since-v032104"
+        "disk-monitor-active-since-v032105"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
