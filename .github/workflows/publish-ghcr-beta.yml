@@ -25,9 +25,9 @@ jobs:
         id: app_version
         shell: bash
         run: |
-          version="$(sed -n 's/^  version: "\([^"]*\)"/\1/p' docker-compose.beta.yml | head -n1)"
+          version="$(tr -d '[:space:]' < BETA_VERSION)"
           if [ -z "$version" ]; then
-            echo "Could not read Beta version from docker-compose.beta.yml" >&2
+            echo "Could not read Beta version from BETA_VERSION" >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -57,7 +57,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.beta
+          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
