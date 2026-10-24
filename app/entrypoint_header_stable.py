@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.104-beta.2"',
+        '"v0.32.104-beta.3"',
         1,
     )
 
@@ -428,7 +428,7 @@ if entrypoint._index_html is not None:
     )
 
     active_since_beta_patch = r"""
-<script id="disk-monitor-active-since-beta2">
+<script id="disk-monitor-active-since-beta3">
 (() => {
     const ACTIVE_SINCE_STORAGE_KEY =
         "diskMonitorActiveSinceByDisk";
@@ -517,10 +517,67 @@ if entrypoint._index_html is not None:
             disks
         );
 
+        /*
+         * RAID summary cards (md*) are synthetic display rows created by
+         * getDisplayDisks(). They are not part of the raw /api/disks list,
+         * so Beta 2 never created an ACTIVE timestamp for them.
+         *
+         * Keep the native standby tracker on the untouched raw rows and add
+         * only the display-only rows to ACTIVE tracking.
+         */
+        const activeRows = [
+            ...rows
+        ];
+
+        if (
+            typeof getDisplayDisks === "function"
+        ) {
+            const knownKeys = new Set(
+                activeRows
+                    .map(
+                        disk =>
+                            getStandbyTrackingKey(
+                                disk
+                            )
+                    )
+                    .filter(
+                        Boolean
+                    )
+            );
+
+            getDisplayDisks(
+                rows
+            ).forEach(
+                disk => {
+                    const key =
+                        getStandbyTrackingKey(
+                            disk
+                        );
+
+                    if (
+                        !key
+                        || knownKeys.has(
+                            key
+                        )
+                    ) {
+                        return;
+                    }
+
+                    knownKeys.add(
+                        key
+                    );
+
+                    activeRows.push(
+                        disk
+                    );
+                }
+            );
+        }
+
         let changed = false;
         const now = Date.now();
 
-        rows.forEach(disk => {
+        activeRows.forEach(disk => {
             const key = getStandbyTrackingKey(
                 disk
             );
@@ -676,7 +733,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-active-since-beta2"
+        "disk-monitor-active-since-beta3"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
