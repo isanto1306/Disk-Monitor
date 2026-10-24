@@ -6,8 +6,8 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 
 ## Current development versions
 
-- Backend: `0.22.41`
-- Frontend: `0.32.103`
+- Backend: `0.22.42`
+- Frontend: `0.32.104`
 
 ## Docker image
 
@@ -22,7 +22,7 @@ ghcr.io/isanto1306/disk-monitor:latest
 - Physical disk discovery for HDD, SSD, NVMe and supported USB storage
 - Capacity with used/free overview, mount points and current disk activity
 - Power-state / standby monitoring
-- Persistent standby-since timestamps after an observed power-state transition
+- Persistent standby/active-since timestamps after an observed power-state transition
 - SMART health, temperature and detailed SMART attributes
 - SMART history with date, time and value hover details for available metrics
 - Manual SMART refresh and full SMART check
