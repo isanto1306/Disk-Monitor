@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.42"
-entrypoint.main.app.version = "0.22.42"
+app.version = "0.22.41"
+entrypoint.main.app.version = "0.22.41"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -214,21 +214,12 @@ def _add_persistent_standby_since(result):
             standby_since = previous.get(
                 "standby_since"
             )
-            active_since = previous.get(
-                "active_since"
-            )
 
             current_is_standby = _is_standby_status(
                 current_status
             )
             previous_was_standby = _is_standby_status(
                 previous_status
-            )
-            current_is_active = (
-                current_status == "ACTIVE"
-            )
-            previous_was_active = (
-                previous_status == "ACTIVE"
             )
 
             if current_is_standby:
@@ -253,40 +244,17 @@ def _add_persistent_standby_since(result):
                              )
                         )
 
-                active_since = None
                 new_entry = {
                     "status": current_status,
-                    "standby_since": standby_since,
-                    "active_since": None
-                }
-
-            elif current_is_active:
-                standby_since = None
-
-                if (
-                    not active_since
-                    or not previous_was_active
-                ):
-                    active_since = (
-                        _utc_iso_from_epoch(
-                            now_epoch
-                        )
-                    )
-
-                new_entry = {
-                    "status": current_status,
-                    "standby_since": None,
-                    "active_since": active_since
+                    "standby_since": standby_since
                 }
 
             else:
-                standby_since = None
-                active_since = None
                 new_entry = {
                     "status": current_status,
-                    "standby_since": None,
-                    "active_since": None
+                    "standby_since": None
                 }
+                standby_since = None
 
             if previous != new_entry:
                 by_disk[key] = new_entry
@@ -297,12 +265,6 @@ def _add_persistent_standby_since(result):
                 power_state[
                     "standby_since"
                 ] = standby_since
-
-            if active_since:
-                disk["active_since"] = active_since
-                power_state[
-                    "active_since"
-                ] = active_since
 
         if changed:
             _save_standby_since_state()
@@ -371,7 +333,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.108"',
+        '"v0.32.103"',
         1,
     )
 
@@ -432,464 +394,3 @@ if entrypoint._index_html is not None:
         new_scrollbar_padding,
         1,
     )
-
-    active_since_runtime_patch = r"""
-<style id="disk-monitor-active-since-v032108">
-.dm-active-since-fallback {
-    margin-left: 10px;
-    color: #8290a3;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 1;
-    white-space: nowrap;
-}
-</style>
-<script id="disk-monitor-active-since-v032108">
-(() => {
-    let latestActiveSinceDisks = [];
-    let activeSinceRenderFrame = null;
-
-    const leafElements = root => (
-        root
-            ? Array.from(
-                root.querySelectorAll("*")
-            ).filter(
-                element => element.children.length === 0
-            )
-            : []
-    );
-
-    const isSinceText = text => (
-        /^(seit|since|depuis|desde)\s+\d{1,2}:\d{2}$/i
-            .test(
-                String(text || "").trim()
-            )
-    );
-
-    const findNativeSinceTemplate = () => {
-        const footers = Array.from(
-            document.querySelectorAll(
-                ".disk-card .disk-footer"
-            )
-        );
-
-        for (const footer of footers) {
-            const element = leafElements(
-                footer
-            ).find(
-                candidate => (
-                    !candidate.classList.contains(
-                        "dm-active-since"
-                    )
-                    && isSinceText(
-                        candidate.textContent
-                    )
-                )
-            );
-
-            if (element) {
-                return element;
-            }
-        }
-
-        return null;
-    };
-
-    const sincePrefix = template => {
-        if (template) {
-            const text = String(
-                template.textContent || ""
-            ).trim();
-            const match = text.match(
-                /^(seit|since|depuis|desde)\b/i
-            );
-            if (match) {
-                return match[1];
-            }
-        }
-
-        const language = String(
-            document.documentElement.lang
-            || navigator.language
-            || "en"
-        ).toLowerCase();
-
-        if (language.startsWith("de")) {
-            return "seit";
-        }
-        if (language.startsWith("fr")) {
-            return "depuis";
-        }
-        if (
-            language.startsWith("pt")
-            || language.startsWith("es")
-        ) {
-            return "desde";
-        }
-
-        return "since";
-    };
-
-    const formatClockTime = value => {
-        const date = new Date(
-            value
-        );
-
-        if (
-            Number.isNaN(
-                date.getTime()
-            )
-        ) {
-            return "";
-        }
-
-        return date.toLocaleTimeString(
-            [],
-            {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false
-            }
-        );
-    };
-
-    const findCardForDisk = (
-        cards,
-        disk,
-        index
-    ) => {
-        const device = String(
-            disk && disk.device
-            || ""
-        ).trim();
-
-        if (device) {
-            const exact = cards.find(
-                card => (
-                    card.getAttribute(
-                        "data-device"
-                    ) === device
-                    || (
-                        card.dataset
-                        && card.dataset.device === device
-                    )
-                )
-            );
-
-            if (exact) {
-                return exact;
-            }
-
-            const byText = cards.find(
-                card => String(
-                    card.textContent || ""
-                ).includes(
-                    device
-                )
-            );
-
-            if (byText) {
-                return byText;
-            }
-        }
-
-        return cards[index] || null;
-    };
-
-    const removeFallback = card => {
-        if (!card) {
-            return;
-        }
-
-        card.querySelectorAll(
-            ".dm-active-since"
-        ).forEach(
-            element => element.remove()
-        );
-    };
-
-    const applyActiveSince = (
-        card,
-        disk,
-        template
-    ) => {
-        if (!card || !disk) {
-            return;
-        }
-
-        const powerState = (
-            disk.power_state
-            && typeof disk.power_state === "object"
-        )
-            ? disk.power_state
-            : {};
-
-        const status = String(
-            powerState.status
-            || ""
-        ).toUpperCase();
-
-        if (status !== "ACTIVE") {
-            removeFallback(
-                card
-            );
-            return;
-        }
-
-        const activeSince = (
-            disk.active_since
-            || powerState.active_since
-            || ""
-        );
-
-        const timeText = formatClockTime(
-            activeSince
-        );
-
-        if (!timeText) {
-            removeFallback(
-                card
-            );
-            return;
-        }
-
-        const footer = (
-            card.querySelector(
-                ".disk-footer"
-            )
-            || card
-        );
-
-        const nativeSince = leafElements(
-            footer
-        ).find(
-            element => (
-                !element.classList.contains(
-                    "dm-active-since"
-                )
-                && isSinceText(
-                    element.textContent
-                )
-            )
-        );
-
-        if (nativeSince) {
-            removeFallback(
-                card
-            );
-            return;
-        }
-
-        const activeLabels = new Set(
-            [
-                "ACTIVE",
-                "AKTIV",
-                "ACTIF",
-                "ATIVO",
-                "ACTIVO"
-            ]
-        );
-
-        const activeBadge = leafElements(
-            footer
-        ).find(
-            element => activeLabels.has(
-                String(
-                    element.textContent || ""
-                ).trim().toUpperCase()
-            )
-        );
-
-        if (!activeBadge) {
-            return;
-        }
-
-        let label = footer.querySelector(
-            ".dm-active-since"
-        );
-
-        if (!label) {
-            if (template) {
-                label = template.cloneNode(
-                    false
-                );
-                label.removeAttribute(
-                    "id"
-                );
-                label.classList.add(
-                    "dm-active-since"
-                );
-            }
-            else {
-                label = document.createElement(
-                    "span"
-                );
-                label.className = (
-                    "dm-active-since "
-                    + "dm-active-since-fallback"
-                );
-            }
-
-            activeBadge.insertAdjacentElement(
-                "afterend",
-                label
-            );
-        }
-
-        const nextText = (
-            sincePrefix(
-                template
-            )
-            + " "
-            + timeText
-        );
-
-        if (
-            String(
-                label.textContent || ""
-            ) !== nextText
-        ) {
-            label.textContent = nextText;
-        }
-    };
-
-    const renderActiveSince = disks => {
-        const cards = Array.from(
-            document.querySelectorAll(
-                ".disk-card"
-            )
-        );
-
-        if (!cards.length) {
-            return;
-        }
-
-        const template = (
-            findNativeSinceTemplate()
-        );
-
-        disks.forEach(
-            (disk, index) => {
-                applyActiveSince(
-                    findCardForDisk(
-                        cards,
-                        disk,
-                        index
-                    ),
-                    disk,
-                    template
-                );
-            }
-        );
-    };
-
-    const scheduleActiveSinceRender = disks => {
-        latestActiveSinceDisks = Array.isArray(
-            disks
-        )
-            ? disks
-            : [];
-
-        if (activeSinceRenderFrame !== null) {
-            window.cancelAnimationFrame(
-                activeSinceRenderFrame
-            );
-        }
-
-        activeSinceRenderFrame = (
-            window.requestAnimationFrame(
-                () => {
-                    activeSinceRenderFrame = null;
-
-                    /*
-                     * The dashboard consumes /api/disks and then rebuilds
-                     * the cards in the same task. Running on the next frame
-                     * puts "since" back after that native render, before the
-                     * browser paints the refreshed cards.
-                     */
-                    renderActiveSince(
-                        latestActiveSinceDisks
-                    );
-                }
-            )
-        );
-    };
-
-    const nativeResponseJson = (
-        window.Response
-        && window.Response.prototype
-        && window.Response.prototype.json
-    );
-
-    if (nativeResponseJson) {
-        window.Response.prototype.json = function(...args) {
-            const responseUrl = String(
-                this.url || ""
-            );
-
-            const jsonPromise = nativeResponseJson.apply(
-                this,
-                args
-            );
-
-            if (
-                !responseUrl.includes(
-                    "/api/disks"
-                )
-            ) {
-                return jsonPromise;
-            }
-
-            return jsonPromise.then(
-                payload => {
-                    const disks = Array.isArray(
-                        payload && payload.disks
-                    )
-                        ? payload.disks
-                        : [];
-
-                    scheduleActiveSinceRender(
-                        disks
-                    );
-
-                    return payload;
-                }
-            );
-        };
-    }
-
-    /*
-     * One initial read covers the case where the first dashboard request
-     * finished before this runtime hook was installed. After that, the
-     * existing Disk Monitor refresh supplies all updates; no extra polling.
-     */
-    fetch(
-        "/api/disks",
-        {
-            cache: "no-store"
-        }
-    )
-        .then(
-            response => (
-                response.ok
-                    ? response.json()
-                    : null
-            )
-        )
-        .catch(
-            () => {}
-        );
-})();
-</script>
-"""
-
-    if (
-        "disk-monitor-active-since-v032108"
-        not in entrypoint._index_html
-    ):
-        entrypoint._index_html = entrypoint._index_html.replace(
-            "</body>",
-            active_since_runtime_patch
-            + "\n</body>",
-            1,
-        )
