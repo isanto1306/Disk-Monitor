@@ -371,7 +371,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105"',
+        '"v0.32.106"',
         1,
     )
 
@@ -434,7 +434,7 @@ if entrypoint._index_html is not None:
     )
 
     active_since_runtime_patch = r"""
-<style id="disk-monitor-active-since-v032105">
+<style id="disk-monitor-active-since-v032106">
 .dm-active-since-fallback {
     margin-left: 10px;
     color: #8290a3;
@@ -444,9 +444,12 @@ if entrypoint._index_html is not None:
     white-space: nowrap;
 }
 </style>
-<script id="disk-monitor-active-since-v032105">
+<script id="disk-monitor-active-since-v032106">
 (() => {
     const ACTIVE_REFRESH_MS = 5000;
+    let cachedDisks = [];
+    let observedDiskGrid = null;
+    let diskGridObserver = null;
 
     const leafElements = root => (
         root
@@ -735,12 +738,92 @@ if entrypoint._index_html is not None:
             );
         }
 
-        label.textContent = (
+        const nextText = (
             sincePrefix(
                 template
             )
             + " "
             + timeText
+        );
+
+        if (
+            String(
+                label.textContent || ""
+            ) !== nextText
+        ) {
+            label.textContent = nextText;
+        }
+    };
+
+    const applyCachedActiveSince = () => {
+        const cards = Array.from(
+            document.querySelectorAll(
+                ".disk-card"
+            )
+        );
+
+        if (
+            !cards.length
+            || !cachedDisks.length
+        ) {
+            return;
+        }
+
+        const template = (
+            findNativeSinceTemplate()
+        );
+
+        cachedDisks.forEach(
+            (disk, index) => {
+                applyActiveSince(
+                    findCardForDisk(
+                        cards,
+                        disk,
+                        index
+                    ),
+                    disk,
+                    template
+                );
+            }
+        );
+    };
+
+    const ensureDiskGridObserver = () => {
+        const grid = document.getElementById(
+            "diskGrid"
+        );
+
+        if (
+            !grid
+            || grid === observedDiskGrid
+        ) {
+            return;
+        }
+
+        if (diskGridObserver) {
+            diskGridObserver.disconnect();
+        }
+
+        observedDiskGrid = grid;
+
+        diskGridObserver = new MutationObserver(
+            () => {
+                /*
+                 * The normal dashboard refresh rebuilds card DOM roughly
+                 * every 10 seconds. MutationObserver callbacks run before
+                 * the browser paints, so restore ACTIVE "since" immediately
+                 * instead of waiting for the next polling pass.
+                 */
+                applyCachedActiveSince();
+            }
+        );
+
+        diskGridObserver.observe(
+            grid,
+            {
+                childList: true,
+                subtree: true
+            }
         );
     };
 
@@ -768,33 +851,10 @@ if entrypoint._index_html is not None:
                 ? payload.disks
                 : [];
 
-            const cards = Array.from(
-                document.querySelectorAll(
-                    ".disk-card"
-                )
-            );
+            cachedDisks = disks;
 
-            if (!cards.length) {
-                return;
-            }
-
-            const template = (
-                findNativeSinceTemplate()
-            );
-
-            disks.forEach(
-                (disk, index) => {
-                    applyActiveSince(
-                        findCardForDisk(
-                            cards,
-                            disk,
-                            index
-                        ),
-                        disk,
-                        template
-                    );
-                }
-            );
+            ensureDiskGridObserver();
+            applyCachedActiveSince();
         }
         catch (_) {
             // Container restarts can temporarily make the API unavailable.
@@ -802,8 +862,12 @@ if entrypoint._index_html is not None:
     };
 
     syncActiveSince();
+
     window.setInterval(
-        syncActiveSince,
+        () => {
+            ensureDiskGridObserver();
+            syncActiveSince();
+        },
         ACTIVE_REFRESH_MS
     );
 })();
@@ -811,7 +875,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-active-since-v032105"
+        "disk-monitor-active-since-v032106"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
