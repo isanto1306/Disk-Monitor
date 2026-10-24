@@ -371,7 +371,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.107"',
+        '"v0.32.108"',
         1,
     )
 
@@ -434,7 +434,7 @@ if entrypoint._index_html is not None:
     )
 
     active_since_runtime_patch = r"""
-<style id="disk-monitor-active-since-v032107">
+<style id="disk-monitor-active-since-v032108">
 .dm-active-since-fallback {
     margin-left: 10px;
     color: #8290a3;
@@ -444,9 +444,10 @@ if entrypoint._index_html is not None:
     white-space: nowrap;
 }
 </style>
-<script id="disk-monitor-active-since-v032107">
+<script id="disk-monitor-active-since-v032108">
 (() => {
-    const ACTIVE_REFRESH_MS = 5000;
+    let latestActiveSinceDisks = [];
+    let activeSinceRenderFrame = null;
 
     const leafElements = root => (
         root
@@ -752,74 +753,138 @@ if entrypoint._index_html is not None:
         }
     };
 
-    const syncActiveSince = async () => {
-        if (document.hidden) {
+    const renderActiveSince = disks => {
+        const cards = Array.from(
+            document.querySelectorAll(
+                ".disk-card"
+            )
+        );
+
+        if (!cards.length) {
             return;
         }
 
-        try {
-            const response = await fetch(
-                "/api/disks",
-                {
-                    cache: "no-store"
-                }
-            );
+        const template = (
+            findNativeSinceTemplate()
+        );
 
-            if (!response.ok) {
-                return;
-            }
-
-            const payload = await response.json();
-            const disks = Array.isArray(
-                payload && payload.disks
-            )
-                ? payload.disks
-                : [];
-
-            const cards = Array.from(
-                document.querySelectorAll(
-                    ".disk-card"
-                )
-            );
-
-            if (!cards.length) {
-                return;
-            }
-
-            const template = (
-                findNativeSinceTemplate()
-            );
-
-            disks.forEach(
-                (disk, index) => {
-                    applyActiveSince(
-                        findCardForDisk(
-                            cards,
-                            disk,
-                            index
-                        ),
+        disks.forEach(
+            (disk, index) => {
+                applyActiveSince(
+                    findCardForDisk(
+                        cards,
                         disk,
-                        template
-                    );
-                }
-            );
-        }
-        catch (_) {
-            // Container restarts can temporarily make the API unavailable.
-        }
+                        index
+                    ),
+                    disk,
+                    template
+                );
+            }
+        );
     };
 
-    syncActiveSince();
-    window.setInterval(
-        syncActiveSince,
-        ACTIVE_REFRESH_MS
+    const scheduleActiveSinceRender = disks => {
+        latestActiveSinceDisks = Array.isArray(
+            disks
+        )
+            ? disks
+            : [];
+
+        if (activeSinceRenderFrame !== null) {
+            window.cancelAnimationFrame(
+                activeSinceRenderFrame
+            );
+        }
+
+        activeSinceRenderFrame = (
+            window.requestAnimationFrame(
+                () => {
+                    activeSinceRenderFrame = null;
+
+                    /*
+                     * The dashboard consumes /api/disks and then rebuilds
+                     * the cards in the same task. Running on the next frame
+                     * puts "since" back after that native render, before the
+                     * browser paints the refreshed cards.
+                     */
+                    renderActiveSince(
+                        latestActiveSinceDisks
+                    );
+                }
+            )
+        );
+    };
+
+    const nativeResponseJson = (
+        window.Response
+        && window.Response.prototype
+        && window.Response.prototype.json
     );
+
+    if (nativeResponseJson) {
+        window.Response.prototype.json = function(...args) {
+            const responseUrl = String(
+                this.url || ""
+            );
+
+            const jsonPromise = nativeResponseJson.apply(
+                this,
+                args
+            );
+
+            if (
+                !responseUrl.includes(
+                    "/api/disks"
+                )
+            ) {
+                return jsonPromise;
+            }
+
+            return jsonPromise.then(
+                payload => {
+                    const disks = Array.isArray(
+                        payload && payload.disks
+                    )
+                        ? payload.disks
+                        : [];
+
+                    scheduleActiveSinceRender(
+                        disks
+                    );
+
+                    return payload;
+                }
+            );
+        };
+    }
+
+    /*
+     * One initial read covers the case where the first dashboard request
+     * finished before this runtime hook was installed. After that, the
+     * existing Disk Monitor refresh supplies all updates; no extra polling.
+     */
+    fetch(
+        "/api/disks",
+        {
+            cache: "no-store"
+        }
+    )
+        .then(
+            response => (
+                response.ok
+                    ? response.json()
+                    : null
+            )
+        )
+        .catch(
+            () => {}
+        );
 })();
 </script>
 """
 
     if (
-        "disk-monitor-active-since-v032107"
+        "disk-monitor-active-since-v032108"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
