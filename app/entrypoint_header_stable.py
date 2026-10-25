@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.41"
-entrypoint.main.app.version = "0.22.41"
+app.version = "0.22.42"
+entrypoint.main.app.version = "0.22.42"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -214,12 +214,18 @@ def _add_persistent_standby_since(result):
             standby_since = previous.get(
                 "standby_since"
             )
+            active_since = previous.get(
+                "active_since"
+            )
 
             current_is_standby = _is_standby_status(
                 current_status
             )
             previous_was_standby = _is_standby_status(
                 previous_status
+            )
+            current_is_active = (
+                current_status == "ACTIVE"
             )
 
             if current_is_standby:
@@ -244,17 +250,37 @@ def _add_persistent_standby_since(result):
                              )
                         )
 
+                active_since = None
                 new_entry = {
                     "status": current_status,
-                    "standby_since": standby_since
+                    "standby_since": standby_since,
+                    "active_since": None
+                }
+
+            elif current_is_active:
+                standby_since = None
+
+                if not active_since:
+                    active_since = (
+                        _utc_iso_from_epoch(
+                            now_epoch
+                        )
+                    )
+
+                new_entry = {
+                    "status": current_status,
+                    "standby_since": None,
+                    "active_since": active_since
                 }
 
             else:
+                standby_since = None
+                active_since = None
                 new_entry = {
                     "status": current_status,
-                    "standby_since": None
+                    "standby_since": None,
+                    "active_since": None
                 }
-                standby_since = None
 
             if previous != new_entry:
                 by_disk[key] = new_entry
@@ -265,6 +291,12 @@ def _add_persistent_standby_since(result):
                 power_state[
                     "standby_since"
                 ] = standby_since
+
+            if active_since:
+                disk["active_since"] = active_since
+                power_state[
+                    "active_since"
+                ] = active_since
 
         if changed:
             _save_standby_since_state()
@@ -333,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.103"',
+        '"v0.32.104"',
         1,
     )
 
@@ -394,3 +426,319 @@ if entrypoint._index_html is not None:
         new_scrollbar_padding,
         1,
     )
+
+    active_since_patch = r"""
+<script id="disk-monitor-active-since">
+(() => {
+    const ACTIVE_SINCE_STORAGE_KEY =
+        "diskMonitorActiveSinceByDisk";
+
+    if (
+        typeof state === "undefined"
+        || typeof syncStandbySinceTracking !== "function"
+        || typeof renderStandbySince !== "function"
+        || typeof getStandbyTrackingKey !== "function"
+        || typeof formatStandbySinceTime !== "function"
+    ) {
+        return;
+    }
+
+    const loadActiveSinceTracking = () => {
+        try {
+            const raw = localStorage.getItem(
+                ACTIVE_SINCE_STORAGE_KEY
+            );
+
+            if (!raw) {
+                return {};
+            }
+
+            const parsed = JSON.parse(raw);
+
+            return (
+                parsed
+                && typeof parsed === "object"
+                && !Array.isArray(parsed)
+            )
+                ? parsed
+                : {};
+        }
+        catch (_) {
+            return {};
+        }
+    };
+
+    const saveActiveSinceTracking = () => {
+        try {
+            localStorage.setItem(
+                ACTIVE_SINCE_STORAGE_KEY,
+                JSON.stringify(
+                    state.activeSinceByDisk
+                )
+            );
+        }
+        catch (_) {}
+    };
+
+    state.activeSinceByDisk =
+        loadActiveSinceTracking();
+
+    const originalSyncStandbySinceTracking =
+        syncStandbySinceTracking;
+
+    syncStandbySinceTracking = function(disks) {
+        const rows = Array.isArray(disks)
+            ? disks
+            : [];
+
+        /*
+         * Save the previous statuses BEFORE the native standby tracker
+         * updates state.lastPowerStatusByDisk.
+         */
+        const previousStatuses = {};
+
+        rows.forEach(disk => {
+            const key = getStandbyTrackingKey(
+                disk
+            );
+
+            if (!key) {
+                return;
+            }
+
+            previousStatuses[key] =
+                state.lastPowerStatusByDisk[
+                    key
+                ]
+                || null;
+        });
+
+        originalSyncStandbySinceTracking(
+            disks
+        );
+
+        /*
+         * RAID summary cards (md*) are synthetic display rows created by
+         * getDisplayDisks(). They are not part of the raw /api/disks list,
+         * so the raw tracker cannot create an ACTIVE timestamp for them.
+         *
+         * Keep the native standby tracker on the untouched raw rows and add
+         * only the display-only rows to ACTIVE tracking.
+         */
+        const activeRows = [
+            ...rows
+        ];
+
+        if (
+            typeof getDisplayDisks === "function"
+        ) {
+            const knownKeys = new Set(
+                activeRows
+                    .map(
+                        disk =>
+                            getStandbyTrackingKey(
+                                disk
+                            )
+                    )
+                    .filter(
+                        Boolean
+                    )
+            );
+
+            getDisplayDisks(
+                rows
+            ).forEach(
+                disk => {
+                    const key =
+                        getStandbyTrackingKey(
+                            disk
+                        );
+
+                    if (
+                        !key
+                        || knownKeys.has(
+                            key
+                        )
+                    ) {
+                        return;
+                    }
+
+                    knownKeys.add(
+                        key
+                    );
+
+                    activeRows.push(
+                        disk
+                    );
+                }
+            );
+        }
+
+        let changed = false;
+        const now = Date.now();
+
+        activeRows.forEach(disk => {
+            const key = getStandbyTrackingKey(
+                disk
+            );
+
+            if (!key) {
+                return;
+            }
+
+            const powerState =
+                disk.power_state || {};
+
+            const currentStatus =
+                String(
+                    powerState.status
+                    || "UNKNOWN"
+                );
+
+            if (currentStatus === "ACTIVE") {
+                const existingTimestamp = Number(
+                    state.activeSinceByDisk[
+                        key
+                    ]
+                );
+
+                const backendActiveSince = (
+                    disk.active_since
+                    || powerState.active_since
+                    || ""
+                );
+
+                const backendTimestamp =
+                    backendActiveSince
+                        ? Date.parse(
+                            backendActiveSince
+                        )
+                        : Number.NaN;
+
+                if (
+                    Number.isFinite(
+                        backendTimestamp
+                    )
+                    && backendTimestamp > 0
+                ) {
+                    if (
+                        existingTimestamp
+                        !== backendTimestamp
+                    ) {
+                        state.activeSinceByDisk[
+                            key
+                        ] = backendTimestamp;
+                        changed = true;
+                    }
+                }
+                else if (
+                    !Number.isFinite(
+                        existingTimestamp
+                    )
+                    || existingTimestamp <= 0
+                ) {
+                    /*
+                     * No hardware ACTIVE timestamp exists. If the backend
+                     * cannot provide one, start from the first observation.
+                     */
+                    state.activeSinceByDisk[
+                        key
+                    ] = now;
+                    changed = true;
+                }
+            }
+            else if (
+                Object.prototype.hasOwnProperty.call(
+                    state.activeSinceByDisk,
+                    key
+                )
+            ) {
+                delete state.activeSinceByDisk[
+                    key
+                ];
+                changed = true;
+            }
+        });
+
+        if (changed) {
+            saveActiveSinceTracking();
+        }
+    };
+
+    const originalRenderStandbySince =
+        renderStandbySince;
+
+    renderStandbySince = function(
+        disk,
+        powerStatus
+    ) {
+        const standbyHtml =
+            originalRenderStandbySince(
+                disk,
+                powerStatus
+            );
+
+        if (standbyHtml) {
+            return standbyHtml;
+        }
+
+        if (powerStatus !== "ACTIVE") {
+            return "";
+        }
+
+        const key = getStandbyTrackingKey(
+            disk
+        );
+
+        if (!key) {
+            return "";
+        }
+
+        const timestamp = Number(
+            state.activeSinceByDisk[
+                key
+            ]
+        );
+
+        if (
+            !Number.isFinite(timestamp)
+            || timestamp <= 0
+        ) {
+            return "";
+        }
+
+        const formattedTime =
+            formatStandbySinceTime(
+                timestamp
+            );
+
+        if (!formattedTime) {
+            return "";
+        }
+
+        /*
+         * Reuse the exact same class and translation key as STANDBY.
+         * This gives identical placement/style and automatically supports
+         * DE/EN/FR/PT/ES: seit/since/depuis/desde.
+         */
+        return `
+            <span class="standby-since-time">
+                ${escapeHtml(t("standbySince"))}
+                ${escapeHtml(formattedTime)}
+            </span>
+        `;
+    };
+})();
+</script>
+"""
+
+    if (
+        "disk-monitor-active-since"
+        not in entrypoint._index_html
+    ):
+        entrypoint._index_html = entrypoint._index_html.replace(
+            "</body>",
+            active_since_patch
+            + "\n</body>",
+            1,
+        )
