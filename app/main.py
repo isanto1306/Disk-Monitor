@@ -11820,6 +11820,10 @@ def status(
         "storage_usage_identity":
             "host-mountinfo-major-minor",
         "raid_display_metadata": True,
+        "live_power_estimate": True,
+        "live_power_electrically_measured": False,
+        "power_profile_database": True,
+        "nvme_controller_power_profiles": True,
         "service_runtime":
             get_service_runtime(),
         "zimaos_standby_api": True,
