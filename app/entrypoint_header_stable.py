@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.1"
-entrypoint.main.app.version = "0.22.43-beta.1"
+app.version = "0.22.43-beta.2"
+entrypoint.main.app.version = "0.22.43-beta.2"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.1"',
+        '"v0.32.105-beta.2"',
         1,
     )
 
@@ -745,7 +745,7 @@ if entrypoint._index_html is not None:
 
 
     live_power_beta_patch = r"""
-<style id="disk-monitor-live-power-beta1-style">
+<style id="disk-monitor-live-power-beta2-style">
 .power-estimate-live {
     display: inline-flex;
     align-items: center;
@@ -755,7 +755,7 @@ if entrypoint._index_html is not None:
     opacity: 0.9;
 }
 </style>
-<script id="disk-monitor-live-power-beta1">
+<script id="disk-monitor-live-power-beta2">
 (() => {
     if (
         typeof renderStandbySince !== "function"
@@ -1105,7 +1105,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-live-power-beta1"
+        "disk-monitor-live-power-beta2"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
