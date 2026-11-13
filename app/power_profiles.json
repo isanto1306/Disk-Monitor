@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "description": "Manufacturer/controller power profiles used only for estimated live power display. Values are not electrical measurements.",
   "profiles": [
     {
@@ -8,6 +8,7 @@
         "ST20000NM007D"
       ],
       "device_type": "HDD",
+      "transport": "ata",
       "watts": {
         "active": 9.3,
         "idle": 5.6
@@ -24,6 +25,7 @@
         "ST26000NM000C"
       ],
       "device_type": "HDD",
+      "transport": "ata",
       "watts": {
         "active": 10.5,
         "idle": 7.2
@@ -41,6 +43,7 @@
         "WD40EFRX"
       ],
       "device_type": "HDD",
+      "transport": "ata",
       "watts": {
         "active": 4.5,
         "idle": 3.3,
@@ -55,9 +58,13 @@
     {
       "id": "samsung-870-qvo-8tb",
       "model_prefixes": [
-        "SAMSUNG SSD 870 QVO 8TB"
+        "SAMSUNG SSD 870 QVO 8TB",
+        "SAMSUNG SSD 870"
       ],
       "device_type": "SSD",
+      "transport": "ata",
+      "size_tb_min": 7.5,
+      "size_tb_max": 8.5,
       "watts": {
         "read": 2.4,
         "write": 3.3,
@@ -68,6 +75,69 @@
         "kind": "manufacturer",
         "label": "Samsung 870 QVO 8 TB",
         "url": "https://image.semiconductor.samsung.com/resources/data-sheet/Samsung_SSD_870_QVO_Data_Sheet_Rev1.1.pdf"
+      }
+    },
+    {
+      "id": "samsung-pm9a1-1tb-mzvl21t0hclr",
+      "model_prefixes": [
+        "SAMSUNG MZVL21T0HCLR"
+      ],
+      "device_type": "SSD",
+      "transport": "nvme",
+      "watts": {
+        "active": 8.37,
+        "idle": 0.005
+      },
+      "power_states": {
+        "active": "PS0",
+        "idle": "PS4"
+      },
+      "qualifier": "≤",
+      "source": {
+        "kind": "nvme-controller-profile",
+        "label": "NVMe controller-reported power states"
+      }
+    },
+    {
+      "id": "wd-black-sn7100-1tb",
+      "model_prefixes": [
+        "WD_BLACK SN7100 1TB"
+      ],
+      "device_type": "SSD",
+      "transport": "nvme",
+      "watts": {
+        "active": 4.5,
+        "idle": 0.003
+      },
+      "power_states": {
+        "active": "PS0",
+        "idle": "PS5"
+      },
+      "qualifier": "≤",
+      "source": {
+        "kind": "nvme-controller-profile",
+        "label": "NVMe controller-reported power states"
+      }
+    },
+    {
+      "id": "samsung-970-evo-plus-1tb",
+      "model_prefixes": [
+        "SAMSUNG SSD 970 EVO PLUS 1TB"
+      ],
+      "device_type": "SSD",
+      "transport": "nvme",
+      "watts": {
+        "active": 7.54,
+        "idle": 0.005
+      },
+      "power_states": {
+        "active": "PS0",
+        "idle": "PS4"
+      },
+      "qualifier": "≤",
+      "source": {
+        "kind": "nvme-controller-profile",
+        "label": "NVMe controller-reported power states"
       }
     }
   ]
