@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "description": "Manufacturer/controller power profiles used only for estimated live power display. Values are not electrical measurements.",
+  "profiles": [
+    {
+      "id": "seagate-exos-x20-20tb-st20000nm007d",
+      "model_prefixes": [
+        "ST20000NM007D"
+      ],
+      "device_type": "HDD",
+      "watts": {
+        "active": 9.3,
+        "idle": 5.6
+      },
+      "source": {
+        "kind": "manufacturer",
+        "label": "Seagate Exos X20",
+        "url": "https://www.seagate.com/content/dam/seagate/assets/sustainability/files/life-cycle-assessment-exos-x20-20tb.pdf"
+      }
+    },
+    {
+      "id": "seagate-exos-26tb-st26000nm000c",
+      "model_prefixes": [
+        "ST26000NM000C"
+      ],
+      "device_type": "HDD",
+      "watts": {
+        "active": 10.5,
+        "idle": 7.2
+      },
+      "source": {
+        "kind": "manufacturer",
+        "label": "Seagate Exos 26 TB",
+        "url": "https://www.seagate.com/content/dam/seagate/en/content-fragments/products/datasheets/exos-recertified/exos-recertified-1--en_US.pdf"
+      }
+    },
+    {
+      "id": "wd-red-4tb-wd40efrx",
+      "model_prefixes": [
+        "WDC WD40EFRX",
+        "WD40EFRX"
+      ],
+      "device_type": "HDD",
+      "watts": {
+        "active": 4.5,
+        "idle": 3.3,
+        "standby": 0.4
+      },
+      "source": {
+        "kind": "manufacturer",
+        "label": "Western Digital WD Red 4 TB",
+        "url": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/wd/product/internal-storage/wd-red/data-sheet-wd-red.pdf"
+      }
+    },
+    {
+      "id": "samsung-870-qvo-8tb",
+      "model_prefixes": [
+        "SAMSUNG SSD 870 QVO 8TB"
+      ],
+      "device_type": "SSD",
+      "watts": {
+        "read": 2.4,
+        "write": 3.3,
+        "idle": 0.045,
+        "sleep": 0.01
+      },
+      "source": {
+        "kind": "manufacturer",
+        "label": "Samsung 870 QVO 8 TB",
+        "url": "https://image.semiconductor.samsung.com/resources/data-sheet/Samsung_SSD_870_QVO_Data_Sheet_Rev1.1.pdf"
+      }
+    }
+  ]
+}
