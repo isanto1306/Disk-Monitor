@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.42"
-entrypoint.main.app.version = "0.22.42"
+app.version = "0.22.43-beta.1"
+entrypoint.main.app.version = "0.22.43-beta.1"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.104"',
+        '"v0.32.105-beta.1"',
         1,
     )
 
@@ -739,6 +739,182 @@ if entrypoint._index_html is not None:
         entrypoint._index_html = entrypoint._index_html.replace(
             "</body>",
             active_since_patch
+            + "\n</body>",
+            1,
+        )
+
+
+    live_power_beta_patch = r"""
+<style id="disk-monitor-live-power-beta1-style">
+.power-estimate-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: 0.55rem;
+    white-space: nowrap;
+    opacity: 0.9;
+}
+</style>
+<script id="disk-monitor-live-power-beta1">
+(() => {
+    if (
+        typeof renderStandbySince !== "function"
+        || typeof escapeHtml !== "function"
+    ) {
+        return;
+    }
+
+    const originalRenderStandbySinceWithPower =
+        renderStandbySince;
+
+    const powerNote = () => {
+        const raw = (
+            document.documentElement.lang
+            || navigator.language
+            || "en"
+        ).toLowerCase();
+
+        if (raw.startsWith("de")) {
+            return "Geschätzt bzw. Power-State-Grenzwert, nicht elektrisch gemessen";
+        }
+        if (raw.startsWith("fr")) {
+            return "Estimation ou limite d'état d'alimentation, non mesurée électriquement";
+        }
+        if (raw.startsWith("pt")) {
+            return "Estimativa ou limite do estado de energia, não medida eletricamente";
+        }
+        if (raw.startsWith("es")) {
+            return "Estimación o límite del estado de energía, no medido eléctricamente";
+        }
+
+        return "Estimated or power-state limit, not electrically measured";
+    };
+
+    const formatPowerWatts = value => {
+        const numeric = Number(value);
+
+        if (!Number.isFinite(numeric)) {
+            return "";
+        }
+
+        let maximumFractionDigits = 1;
+
+        if (numeric < 1) {
+            maximumFractionDigits = 3;
+        }
+        else if (numeric < 10) {
+            maximumFractionDigits = 2;
+        }
+
+        try {
+            return new Intl.NumberFormat(
+                document.documentElement.lang
+                || navigator.language
+                || undefined,
+                {
+                    maximumFractionDigits,
+                    minimumFractionDigits: 0
+                }
+            ).format(numeric);
+        }
+        catch (_) {
+            return String(numeric);
+        }
+    };
+
+    const renderPowerEstimate = disk => {
+        const estimate = (
+            disk
+            && typeof disk === "object"
+            && disk.power_estimate
+            && typeof disk.power_estimate === "object"
+        )
+            ? disk.power_estimate
+            : null;
+
+        if (
+            !estimate
+            || !estimate.available
+        ) {
+            return `
+                <span
+                    class="power-estimate-live"
+                    title="${escapeHtml(powerNote())}"
+                >
+                    <span aria-hidden="true">⚡</span>
+                    <span>—</span>
+                </span>
+            `;
+        }
+
+        const formatted = formatPowerWatts(
+            estimate.watts
+        );
+
+        if (!formatted) {
+            return "";
+        }
+
+        const qualifier = String(
+            estimate.qualifier
+            || "≈"
+        );
+
+        const stateSuffix = (
+            estimate.power_state
+                ? ` · ${escapeHtml(
+                    String(
+                        estimate.power_state
+                    )
+                )}`
+                : ""
+        );
+
+        return `
+            <span
+                class="power-estimate-live"
+                title="${escapeHtml(powerNote())}"
+            >
+                <span aria-hidden="true">⚡</span>
+                <span>
+                    ${escapeHtml(qualifier)}
+                    ${escapeHtml(formatted)} W
+                    ${stateSuffix}
+                </span>
+            </span>
+        `;
+    };
+
+    renderStandbySince = function(
+        disk,
+        powerStatus
+    ) {
+        const existing = (
+            originalRenderStandbySinceWithPower(
+                disk,
+                powerStatus
+            )
+            || ""
+        );
+
+        return (
+            existing
+            + renderPowerEstimate(
+                disk
+            )
+        );
+    };
+})();
+</script>
+"""
+
+    if (
+        "disk-monitor-live-power-beta1"
+        not in entrypoint._index_html
+    ):
+        entrypoint._index_html = entrypoint._index_html.replace(
+            "</body>",
+            live_power_beta_patch
             + "\n</body>",
             1,
         )
