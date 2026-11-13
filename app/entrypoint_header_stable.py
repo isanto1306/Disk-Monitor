@@ -767,6 +767,175 @@ if entrypoint._index_html is not None:
     const originalRenderStandbySinceWithPower =
         renderStandbySince;
 
+    state.powerEstimateByRaid = {};
+
+    if (
+        typeof syncStandbySinceTracking
+        === "function"
+    ) {
+        const originalSyncStandbySinceWithPower =
+            syncStandbySinceTracking;
+
+        syncStandbySinceTracking = function(disks) {
+            const rows = Array.isArray(disks)
+                ? disks
+                : [];
+
+            originalSyncStandbySinceWithPower(
+                disks
+            );
+
+            const building = {};
+
+            rows.forEach(disk => {
+                if (
+                    !disk
+                    || typeof disk !== "object"
+                ) {
+                    return;
+                }
+
+                const estimate = (
+                    disk.power_estimate
+                    && typeof disk.power_estimate
+                    === "object"
+                    && disk.power_estimate.available
+                )
+                    ? disk.power_estimate
+                    : null;
+
+                const memberships = (
+                    Array.isArray(
+                        disk.raid_memberships
+                    )
+                        ? disk.raid_memberships
+                        : []
+                );
+
+                memberships.forEach(raid => {
+                    if (
+                        !raid
+                        || typeof raid !== "object"
+                    ) {
+                        return;
+                    }
+
+                    const raidDevice = String(
+                        raid.device
+                        || ""
+                    );
+
+                    if (!raidDevice) {
+                        return;
+                    }
+
+                    if (!building[raidDevice]) {
+                        const expectedMembers = (
+                            Array.isArray(
+                                raid.physical_members
+                            )
+                                ? raid.physical_members.length
+                                : 0
+                        );
+
+                        building[raidDevice] = {
+                            expectedMembers,
+                            members: new Set(),
+                            availableMembers: 0,
+                            watts: 0,
+                            qualifiers: []
+                        };
+                    }
+
+                    const bucket =
+                        building[raidDevice];
+
+                    const memberKey = String(
+                        disk.device
+                        || disk.stable_id
+                        || ""
+                    );
+
+                    if (
+                        !memberKey
+                        || bucket.members.has(
+                            memberKey
+                        )
+                    ) {
+                        return;
+                    }
+
+                    bucket.members.add(
+                        memberKey
+                    );
+
+                    if (!estimate) {
+                        return;
+                    }
+
+                    const watts = Number(
+                        estimate.watts
+                    );
+
+                    if (!Number.isFinite(watts)) {
+                        return;
+                    }
+
+                    bucket.availableMembers += 1;
+                    bucket.watts += watts;
+                    bucket.qualifiers.push(
+                        String(
+                            estimate.qualifier
+                            || "≈"
+                        )
+                    );
+                });
+            });
+
+            const completed = {};
+
+            Object.entries(
+                building
+            ).forEach(
+                ([raidDevice, bucket]) => {
+                    const expected = (
+                        bucket.expectedMembers
+                        || bucket.members.size
+                    );
+
+                    if (
+                        expected <= 0
+                        || bucket.members.size
+                            < expected
+                        || bucket.availableMembers
+                            < expected
+                    ) {
+                        return;
+                    }
+
+                    completed[raidDevice] = {
+                        available: true,
+                        watts: bucket.watts,
+                        qualifier: (
+                            bucket.qualifiers.length
+                            && bucket.qualifiers.every(
+                                value => value === "≤"
+                            )
+                                ? "≤"
+                                : "≈"
+                        ),
+                        mode: "raid-sum",
+                        source: "raid-members",
+                        estimated: true
+                    };
+                }
+            );
+
+            state.powerEstimateByRaid =
+                completed;
+        };
+    }
+
     const powerNote = () => {
         const raw = (
             document.documentElement.lang
@@ -823,7 +992,7 @@ if entrypoint._index_html is not None:
     };
 
     const renderPowerEstimate = disk => {
-        const estimate = (
+        let estimate = (
             disk
             && typeof disk === "object"
             && disk.power_estimate
@@ -831,6 +1000,33 @@ if entrypoint._index_html is not None:
         )
             ? disk.power_estimate
             : null;
+
+        const device = String(
+            (
+                disk
+                && typeof disk === "object"
+                    ? disk.device
+                    : ""
+            )
+            || ""
+        );
+
+        if (
+            (
+                !estimate
+                || !estimate.available
+            )
+            && device.startsWith("md")
+            && state.powerEstimateByRaid
+            && state.powerEstimateByRaid[
+                device
+            ]
+        ) {
+            estimate =
+                state.powerEstimateByRaid[
+                    device
+                ];
+        }
 
         if (
             !estimate
