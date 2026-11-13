@@ -8879,7 +8879,7 @@ def normalize_power_model(
 ):
 
     return re.sub(
-        r"\\s+",
+        r"\s+",
         " ",
         str(
             model
@@ -9018,7 +9018,7 @@ def get_nvme_controller_path(
 ):
 
     match = re.match(
-        r"^(nvme\\d+)n\\d+(?:p\\d+)?$",
+        r"^(nvme\d+)n\d+(?:p\d+)?$",
         str(
             device
             or ""
@@ -9091,9 +9091,9 @@ def get_nvme_power_profile(
         ).splitlines():
 
             match = re.match(
-                r"^ps\\s+(\\d+)\\s*:\\s*"
-                r"mp:([0-9.]+)(m?W)\\s+"
-                r"(non-operational|operational)\\b",
+                r"^ps\s+(\d+)\s*:\s*"
+                r"mp:([0-9.]+)(m?W)\s+"
+                r"(non-operational|operational)\b",
                 line.strip(),
                 re.IGNORECASE
             )
@@ -9155,7 +9155,7 @@ def get_nvme_power_profile(
 
         for value in re.findall(
             r"Idle Transition Power State"
-            r"\\s+\\(ITPS\\):\\s*(\\d+)",
+            r"\s+\(ITPS\):\s*(\d+)",
             apst_output,
             re.IGNORECASE
         ):
