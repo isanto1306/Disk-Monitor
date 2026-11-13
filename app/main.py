@@ -186,8 +186,15 @@ SMART_FULL_CHECK_STATE_FILE = Path(
 SMART_AUTOMATION_CONFIG_FILE = Path(
     "/app/cache/smart_automation_config.json"
 )
+POWER_PROFILES_FILE = Path(
+    "/app/power_profiles.json"
+)
 HOST_ROOT = HOST_PROC / "1/root"
 CGROUP_ROOT = Path("/sys/fs/cgroup")
+
+POWER_PROFILES_CACHE = None
+NVME_POWER_PROFILE_CACHE = {}
+NVME_POWER_PROFILE_LOCK = threading.Lock()
 
 SMART_FULL_CHECK_LOCK = threading.Lock()
 SMART_FULL_CHECK_STATE = {
@@ -8827,6 +8834,683 @@ def get_smart_data(
 
 
 # -------------------------------------------------
+# LIVE POWER ESTIMATE
+# -------------------------------------------------
+
+def load_power_profiles():
+
+    global POWER_PROFILES_CACHE
+
+    if isinstance(
+        POWER_PROFILES_CACHE,
+        list
+    ):
+        return POWER_PROFILES_CACHE
+
+    try:
+
+        data = json.loads(
+            POWER_PROFILES_FILE.read_text(
+                encoding="utf-8"
+            )
+        )
+
+        profiles = data.get(
+            "profiles",
+            []
+        )
+
+        if not isinstance(
+            profiles,
+            list
+        ):
+            profiles = []
+
+    except Exception:
+        profiles = []
+
+    POWER_PROFILES_CACHE = profiles
+
+    return POWER_PROFILES_CACHE
+
+
+def normalize_power_model(
+    model
+):
+
+    return re.sub(
+        r"\\s+",
+        " ",
+        str(
+            model
+            or ""
+        ).strip().upper()
+    )
+
+
+def match_power_profile(
+    model,
+    disk_type
+):
+
+    normalized = normalize_power_model(
+        model
+    )
+
+    if not normalized:
+        return None
+
+    for profile in load_power_profiles():
+
+        if not isinstance(
+            profile,
+            dict
+        ):
+            continue
+
+        expected_type = str(
+            profile.get(
+                "device_type"
+            )
+            or ""
+        ).upper()
+
+        if (
+            expected_type
+            and expected_type
+            != str(
+                disk_type
+                or ""
+            ).upper()
+        ):
+            continue
+
+        prefixes = profile.get(
+            "model_prefixes",
+            []
+        )
+
+        if not isinstance(
+            prefixes,
+            list
+        ):
+            continue
+
+        for prefix in prefixes:
+
+            candidate = normalize_power_model(
+                prefix
+            )
+
+            if (
+                candidate
+                and normalized.startswith(
+                    candidate
+                )
+            ):
+                return profile
+
+    return None
+
+
+def get_nvme_controller_path(
+    device
+):
+
+    match = re.match(
+        r"^(nvme\\d+)n\\d+(?:p\\d+)?$",
+        str(
+            device
+            or ""
+        )
+    )
+
+    if not match:
+        return None
+
+    return (
+        "/dev/"
+        + match.group(1)
+    )
+
+
+def get_nvme_power_profile(
+    device
+):
+
+    controller = get_nvme_controller_path(
+        device
+    )
+
+    if not controller:
+        return None
+
+    with NVME_POWER_PROFILE_LOCK:
+
+        cached = NVME_POWER_PROFILE_CACHE.get(
+            controller
+        )
+
+        if isinstance(
+            cached,
+            dict
+        ):
+            return cached
+
+        identify = run_command(
+            [
+                "nvme",
+                "id-ctrl",
+                controller,
+                "-H"
+            ],
+            timeout=8
+        )
+
+        if identify.get(
+            "returncode"
+        ) != 0:
+
+            NVME_POWER_PROFILE_CACHE[
+                controller
+            ] = {
+                "available": False
+            }
+
+            return NVME_POWER_PROFILE_CACHE[
+                controller
+            ]
+
+        states = []
+
+        for line in (
+            identify.get(
+                "output"
+            )
+            or ""
+        ).splitlines():
+
+            match = re.match(
+                r"^ps\\s+(\\d+)\\s*:\\s*"
+                r"mp:([0-9.]+)(m?W)\\s+"
+                r"(non-operational|operational)\\b",
+                line.strip(),
+                re.IGNORECASE
+            )
+
+            if not match:
+                continue
+
+            try:
+                watts = float(
+                    match.group(2)
+                )
+            except Exception:
+                continue
+
+            if (
+                match.group(3).lower()
+                == "mw"
+            ):
+                watts /= 1000.0
+
+            states.append(
+                {
+                    "ps": int(
+                        match.group(1)
+                    ),
+                    "max_w": watts,
+                    "operational": (
+                        match.group(4).lower()
+                        == "operational"
+                    )
+                }
+            )
+
+        apst = run_command(
+            [
+                "nvme",
+                "get-feature",
+                controller,
+                "-f",
+                "0x0c",
+                "-H"
+            ],
+            timeout=8
+        )
+
+        apst_output = (
+            apst.get(
+                "output"
+            )
+            or ""
+        )
+
+        apst_enabled = (
+            "APSTE): Enabled"
+            in apst_output
+        )
+
+        targets = []
+
+        for value in re.findall(
+            r"Idle Transition Power State"
+            r"\\s+\\(ITPS\\):\\s*(\\d+)",
+            apst_output,
+            re.IGNORECASE
+        ):
+
+            try:
+                targets.append(
+                    int(
+                        value
+                    )
+                )
+            except Exception:
+                pass
+
+        deepest_target = (
+            max(
+                targets
+            )
+            if targets
+            else None
+        )
+
+        result = {
+            "available": bool(
+                states
+            ),
+            "controller": controller,
+            "states": states,
+            "apst_enabled": apst_enabled,
+            "deepest_apst_ps":
+                deepest_target
+        }
+
+        NVME_POWER_PROFILE_CACHE[
+            controller
+        ] = result
+
+        return result
+
+
+def power_estimate_unavailable():
+
+    return {
+        "available": False,
+        "watts": None,
+        "qualifier": "",
+        "mode": "unavailable",
+        "source": "unavailable",
+        "estimated": True
+    }
+
+
+def get_nvme_power_estimate(
+    device,
+    activity
+):
+
+    profile = get_nvme_power_profile(
+        device
+    )
+
+    if (
+        not isinstance(
+            profile,
+            dict
+        )
+        or not profile.get(
+            "available"
+        )
+    ):
+        return power_estimate_unavailable()
+
+    states = profile.get(
+        "states",
+        []
+    )
+
+    activity_status = str(
+        (
+            activity
+            or {}
+        ).get(
+            "status"
+        )
+        or ""
+    ).upper()
+
+    selected = None
+    mode = "idle"
+
+    if activity_status == "ACTIVE":
+
+        operational = [
+            item
+            for item in states
+            if item.get(
+                "operational"
+            )
+        ]
+
+        if operational:
+            selected = max(
+                operational,
+                key=lambda item:
+                    float(
+                        item.get(
+                            "max_w",
+                            0
+                        )
+                    )
+            )
+            mode = "active"
+
+    elif profile.get(
+        "apst_enabled"
+    ):
+
+        target = profile.get(
+            "deepest_apst_ps"
+        )
+
+        if target is not None:
+            selected = next(
+                (
+                    item
+                    for item in states
+                    if item.get(
+                        "ps"
+                    )
+                    == target
+                ),
+                None
+            )
+
+        if selected is None:
+
+            non_operational = [
+                item
+                for item in states
+                if not item.get(
+                    "operational"
+                )
+            ]
+
+            if non_operational:
+                selected = min(
+                    non_operational,
+                    key=lambda item:
+                        float(
+                            item.get(
+                                "max_w",
+                                0
+                            )
+                        )
+                )
+
+    if selected is None:
+        return power_estimate_unavailable()
+
+    return {
+        "available": True,
+        "watts": round(
+            float(
+                selected.get(
+                    "max_w",
+                    0
+                )
+            ),
+            4
+        ),
+        "qualifier": "≤",
+        "mode": mode,
+        "source": "nvme-controller",
+        "estimated": True,
+        "power_state": (
+            "PS"
+            + str(
+                selected.get(
+                    "ps"
+                )
+            )
+        ),
+        "apst_enabled": bool(
+            profile.get(
+                "apst_enabled"
+            )
+        )
+    }
+
+
+def get_profile_power_estimate(
+    profile,
+    activity,
+    power_state,
+    disk_type
+):
+
+    if not isinstance(
+        profile,
+        dict
+    ):
+        return power_estimate_unavailable()
+
+    watts_map = profile.get(
+        "watts",
+        {}
+    )
+
+    if not isinstance(
+        watts_map,
+        dict
+    ):
+        return power_estimate_unavailable()
+
+    status = str(
+        (
+            power_state
+            or {}
+        ).get(
+            "status"
+        )
+        or ""
+    ).upper()
+
+    activity = (
+        activity
+        if isinstance(
+            activity,
+            dict
+        )
+        else {}
+    )
+
+    activity_status = str(
+        activity.get(
+            "status"
+        )
+        or ""
+    ).upper()
+
+    try:
+        read_bps = float(
+            activity.get(
+                "read_bytes_per_sec",
+                0
+            )
+            or 0
+        )
+        write_bps = float(
+            activity.get(
+                "write_bytes_per_sec",
+                0
+            )
+            or 0
+        )
+    except Exception:
+        read_bps = 0.0
+        write_bps = 0.0
+
+    value = None
+    mode = "idle"
+
+    if status in {
+        "STANDBY",
+        "STANDBY_ESTIMATED"
+    }:
+
+        if str(
+            disk_type
+            or ""
+        ).upper() == "SSD":
+
+            value = watts_map.get(
+                "sleep"
+            )
+
+        if value is None:
+            value = watts_map.get(
+                "standby"
+            )
+
+        mode = "standby"
+
+    elif (
+        activity_status == "ACTIVE"
+        or read_bps > 0
+        or write_bps > 0
+    ):
+
+        read_w = watts_map.get(
+            "read"
+        )
+        write_w = watts_map.get(
+            "write"
+        )
+
+        if (
+            read_w is not None
+            and write_w is not None
+            and (
+                read_bps > 0
+                or write_bps > 0
+            )
+        ):
+
+            total_bps = (
+                read_bps
+                + write_bps
+            )
+
+            if total_bps > 0:
+
+                value = (
+                    float(
+                        read_w
+                    )
+                    * read_bps
+                    + float(
+                        write_w
+                    )
+                    * write_bps
+                ) / total_bps
+
+        if value is None:
+            value = watts_map.get(
+                "active"
+            )
+
+        mode = "active"
+
+    else:
+
+        value = watts_map.get(
+            "idle"
+        )
+
+        mode = "idle"
+
+    if value is None:
+        return power_estimate_unavailable()
+
+    source = profile.get(
+        "source",
+        {}
+    )
+
+    return {
+        "available": True,
+        "watts": round(
+            float(
+                value
+            ),
+            4
+        ),
+        "qualifier": "≈",
+        "mode": mode,
+        "source": "manufacturer-datasheet",
+        "estimated": True,
+        "profile_id": profile.get(
+            "id"
+        ),
+        "source_label": (
+            source.get(
+                "label"
+            )
+            if isinstance(
+                source,
+                dict
+            )
+            else None
+        )
+    }
+
+
+def get_power_estimate(
+    device,
+    model,
+    disk_type,
+    transport,
+    activity,
+    power_state
+):
+
+    if (
+        str(
+            transport
+            or ""
+        ).lower()
+        == "nvme"
+        or str(
+            device
+            or ""
+        ).startswith(
+            "nvme"
+        )
+    ):
+
+        return get_nvme_power_estimate(
+            device,
+            activity
+        )
+
+    profile = match_power_profile(
+        model,
+        disk_type
+    )
+
+    return get_profile_power_estimate(
+        profile,
+        activity,
+        power_state,
+        disk_type
+    )
+
+
+# -------------------------------------------------
 # DISK LIST
 # -------------------------------------------------
 
@@ -8996,6 +9680,15 @@ def get_disks():
             1
         )
 
+        power_estimate = get_power_estimate(
+            device,
+            model,
+            disk_type,
+            transport,
+            activity_payload,
+            power_state
+        )
+
         disks.append(
             {
                 "device": device,
@@ -9082,6 +9775,9 @@ def get_disks():
                     ),
 
                 "power_state": power_state,
+
+                "power_estimate":
+                    power_estimate,
 
                 "smart": smart
             }
