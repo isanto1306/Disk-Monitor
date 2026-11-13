@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.2"
-entrypoint.main.app.version = "0.22.43-beta.2"
+app.version = "0.22.43-beta.3"
+entrypoint.main.app.version = "0.22.43-beta.3"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.2"',
+        '"v0.32.105-beta.3"',
         1,
     )
 
@@ -745,17 +745,27 @@ if entrypoint._index_html is not None:
 
 
     live_power_beta_patch = r"""
-<style id="disk-monitor-live-power-beta2-style">
+<style id="disk-monitor-live-power-beta3-style">
 .power-estimate-live {
     display: inline-flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 0.25rem;
     margin-left: 0.55rem;
+    width: 6.9rem;
+    min-width: 6.9rem;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
     opacity: 0.9;
 }
+
+.standby-since-time {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
 </style>
-<script id="disk-monitor-live-power-beta2">
+<script id="disk-monitor-live-power-beta3">
 (() => {
     if (
         typeof renderStandbySince !== "function"
@@ -1056,16 +1066,6 @@ if entrypoint._index_html is not None:
             || "≈"
         );
 
-        const stateSuffix = (
-            estimate.power_state
-                ? ` · ${escapeHtml(
-                    String(
-                        estimate.power_state
-                    )
-                )}`
-                : ""
-        );
-
         return `
             <span
                 class="power-estimate-live"
@@ -1075,7 +1075,6 @@ if entrypoint._index_html is not None:
                 <span>
                     ${escapeHtml(qualifier)}
                     ${escapeHtml(formatted)} W
-                    ${stateSuffix}
                 </span>
             </span>
         `;
@@ -1105,7 +1104,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-live-power-beta2"
+        "disk-monitor-live-power-beta3"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
