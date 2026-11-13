@@ -189,10 +189,44 @@ SMART_AUTOMATION_CONFIG_FILE = Path(
 POWER_PROFILES_FILE = Path(
     "/app/power_profiles.json"
 )
+POWER_PROFILES_REMOTE_CACHE_FILE = Path(
+    "/app/cache/power_profiles_remote.json"
+)
+POWER_PROFILES_REMOTE_URL = os.getenv(
+    "DISK_MONITOR_POWER_PROFILE_URL",
+    (
+        "https://raw.githubusercontent.com/"
+        "isanto1306/Disk-Monitor/"
+        "power-data/power_profiles.json"
+    )
+).strip()
+POWER_PROFILES_REFRESH_SECONDS = max(
+    3600,
+    int(
+        os.getenv(
+            "DISK_MONITOR_POWER_PROFILE_REFRESH_SECONDS",
+            "86400"
+        )
+    )
+)
+POWER_PROFILES_REMOTE_TIMEOUT_SECONDS = max(
+    1.0,
+    float(
+        os.getenv(
+            "DISK_MONITOR_POWER_PROFILE_TIMEOUT_SECONDS",
+            "5"
+        )
+    )
+)
 HOST_ROOT = HOST_PROC / "1/root"
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 
 POWER_PROFILES_CACHE = None
+POWER_PROFILES_SOURCE = "bundled"
+POWER_PROFILES_LAST_REMOTE_CHECK = None
+POWER_PROFILES_LAST_REMOTE_UPDATE = None
+POWER_PROFILES_LAST_REMOTE_ERROR = None
+POWER_PROFILES_LOCK = threading.Lock()
 NVME_POWER_PROFILE_CACHE = {}
 NVME_POWER_PROFILE_LOCK = threading.Lock()
 
@@ -8837,20 +8871,14 @@ def get_smart_data(
 # LIVE POWER ESTIMATE
 # -------------------------------------------------
 
-def load_power_profiles():
-
-    global POWER_PROFILES_CACHE
-
-    if isinstance(
-        POWER_PROFILES_CACHE,
-        list
-    ):
-        return POWER_PROFILES_CACHE
+def _read_power_profiles_file(
+    path
+):
 
     try:
 
         data = json.loads(
-            POWER_PROFILES_FILE.read_text(
+            path.read_text(
                 encoding="utf-8"
             )
         )
@@ -8864,14 +8892,222 @@ def load_power_profiles():
             profiles,
             list
         ):
-            profiles = []
+            return []
+
+        return [
+            profile
+            for profile in profiles
+            if isinstance(
+                profile,
+                dict
+            )
+        ]
 
     except Exception:
-        profiles = []
+        return []
 
-    POWER_PROFILES_CACHE = profiles
 
-    return POWER_PROFILES_CACHE
+def _write_remote_power_profiles(
+    raw_text
+):
+
+    POWER_PROFILES_REMOTE_CACHE_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    temp_file = (
+        POWER_PROFILES_REMOTE_CACHE_FILE
+        .with_suffix(
+            ".tmp"
+        )
+    )
+
+    temp_file.write_text(
+        raw_text,
+        encoding="utf-8"
+    )
+
+    temp_file.replace(
+        POWER_PROFILES_REMOTE_CACHE_FILE
+    )
+
+
+def load_power_profiles():
+
+    global POWER_PROFILES_CACHE
+    global POWER_PROFILES_SOURCE
+
+    with POWER_PROFILES_LOCK:
+
+        if isinstance(
+            POWER_PROFILES_CACHE,
+            list
+        ):
+            return POWER_PROFILES_CACHE
+
+        remote_profiles = (
+            _read_power_profiles_file(
+                POWER_PROFILES_REMOTE_CACHE_FILE
+            )
+        )
+
+        if remote_profiles:
+
+            POWER_PROFILES_CACHE = (
+                remote_profiles
+            )
+            POWER_PROFILES_SOURCE = (
+                "remote-cache"
+            )
+
+            return POWER_PROFILES_CACHE
+
+        bundled_profiles = (
+            _read_power_profiles_file(
+                POWER_PROFILES_FILE
+            )
+        )
+
+        POWER_PROFILES_CACHE = (
+            bundled_profiles
+        )
+        POWER_PROFILES_SOURCE = "bundled"
+
+        return POWER_PROFILES_CACHE
+
+
+def refresh_power_profiles_from_remote():
+
+    global POWER_PROFILES_CACHE
+    global POWER_PROFILES_SOURCE
+    global POWER_PROFILES_LAST_REMOTE_CHECK
+    global POWER_PROFILES_LAST_REMOTE_UPDATE
+    global POWER_PROFILES_LAST_REMOTE_ERROR
+
+    POWER_PROFILES_LAST_REMOTE_CHECK = (
+        datetime.now(
+            timezone.utc
+        ).isoformat()
+    )
+
+    if not POWER_PROFILES_REMOTE_URL:
+
+        POWER_PROFILES_LAST_REMOTE_ERROR = (
+            "remote-url-disabled"
+        )
+        return False
+
+    try:
+
+        request = UrlRequest(
+            POWER_PROFILES_REMOTE_URL,
+            headers={
+                "User-Agent":
+                    "Disk-Monitor-power-profile-updater",
+                "Accept":
+                    "application/json"
+            }
+        )
+
+        with urlopen(
+            request,
+            timeout=
+                POWER_PROFILES_REMOTE_TIMEOUT_SECONDS
+        ) as response:
+
+            raw_bytes = response.read(
+                2 * 1024 * 1024
+            )
+
+        raw_text = raw_bytes.decode(
+            "utf-8"
+        )
+
+        data = json.loads(
+            raw_text
+        )
+
+        profiles = data.get(
+            "profiles",
+            []
+        )
+
+        if (
+            not isinstance(
+                profiles,
+                list
+            )
+            or not profiles
+        ):
+            raise ValueError(
+                "remote profile catalog has no profiles"
+            )
+
+        validated_profiles = [
+            profile
+            for profile in profiles
+            if isinstance(
+                profile,
+                dict
+            )
+        ]
+
+        if not validated_profiles:
+            raise ValueError(
+                "remote profile catalog has no valid profiles"
+            )
+
+        _write_remote_power_profiles(
+            raw_text
+        )
+
+        with POWER_PROFILES_LOCK:
+
+            POWER_PROFILES_CACHE = (
+                validated_profiles
+            )
+            POWER_PROFILES_SOURCE = "remote"
+
+        POWER_PROFILES_LAST_REMOTE_UPDATE = (
+            datetime.now(
+                timezone.utc
+            ).isoformat()
+        )
+        POWER_PROFILES_LAST_REMOTE_ERROR = None
+
+        return True
+
+    except Exception as error:
+
+        POWER_PROFILES_LAST_REMOTE_ERROR = (
+            str(
+                error
+            )[:300]
+        )
+
+        return False
+
+
+def power_profiles_refresh_worker():
+
+    while True:
+
+        try:
+            refresh_power_profiles_from_remote()
+        except Exception:
+            pass
+
+        time.sleep(
+            POWER_PROFILES_REFRESH_SECONDS
+        )
+
+
+threading.Thread(
+    target=power_profiles_refresh_worker,
+    daemon=True,
+    name="power-profile-refresh"
+).start()
 
 
 def normalize_power_model(
@@ -11948,6 +12184,19 @@ def status(
         "live_power_estimate": True,
         "live_power_electrically_measured": False,
         "power_profile_database": True,
+        "power_profile_online_catalog": True,
+        "power_profile_catalog_source":
+            POWER_PROFILES_SOURCE,
+        "power_profile_catalog_url":
+            POWER_PROFILES_REMOTE_URL,
+        "power_profile_last_remote_check":
+            POWER_PROFILES_LAST_REMOTE_CHECK,
+        "power_profile_last_remote_update":
+            POWER_PROFILES_LAST_REMOTE_UPDATE,
+        "power_profile_last_remote_error":
+            POWER_PROFILES_LAST_REMOTE_ERROR,
+        "power_profile_refresh_seconds":
+            POWER_PROFILES_REFRESH_SECONDS,
         "nvme_controller_power_profiles": True,
         "service_runtime":
             get_service_runtime(),
