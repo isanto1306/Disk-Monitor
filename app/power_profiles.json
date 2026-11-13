@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "description": "Manufacturer/controller power profiles used only for estimated live power display. Values are not electrical measurements.",
   "profiles": [
     {
@@ -11,7 +11,8 @@
       "transport": "ata",
       "watts": {
         "active": 9.3,
-        "idle": 5.6
+        "idle": 5.6,
+        "standby": 0.905
       },
       "source": {
         "kind": "manufacturer",
