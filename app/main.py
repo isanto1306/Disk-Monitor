@@ -8890,7 +8890,9 @@ def normalize_power_model(
 
 def match_power_profile(
     model,
-    disk_type
+    disk_type,
+    transport=None,
+    size_bytes=None
 ):
 
     normalized = normalize_power_model(
@@ -8899,6 +8901,18 @@ def match_power_profile(
 
     if not normalized:
         return None
+
+    try:
+        size_tb = (
+            float(
+                size_bytes
+            )
+            / 1000**4
+            if size_bytes
+            else None
+        )
+    except Exception:
+        size_tb = None
 
     for profile in load_power_profiles():
 
@@ -8924,6 +8938,52 @@ def match_power_profile(
             ).upper()
         ):
             continue
+
+        expected_transport = str(
+            profile.get(
+                "transport"
+            )
+            or ""
+        ).lower()
+
+        if (
+            expected_transport
+            and expected_transport
+            != str(
+                transport
+                or ""
+            ).lower()
+        ):
+            continue
+
+        if size_tb is not None:
+
+            try:
+                minimum = profile.get(
+                    "size_tb_min"
+                )
+                maximum = profile.get(
+                    "size_tb_max"
+                )
+
+                if (
+                    minimum is not None
+                    and size_tb < float(
+                        minimum
+                    )
+                ):
+                    continue
+
+                if (
+                    maximum is not None
+                    and size_tb > float(
+                        maximum
+                    )
+                ):
+                    continue
+
+            except Exception:
+                continue
 
         prefixes = profile.get(
             "model_prefixes",
@@ -9441,6 +9501,54 @@ def get_profile_power_estimate(
         {}
     )
 
+    source_kind = (
+        str(
+            source.get(
+                "kind"
+            )
+            or ""
+        )
+        if isinstance(
+            source,
+            dict
+        )
+        else ""
+    )
+
+    power_states = profile.get(
+        "power_states",
+        {}
+    )
+
+    if not isinstance(
+        power_states,
+        dict
+    ):
+        power_states = {}
+
+    power_state_label = (
+        power_states.get(
+            mode
+        )
+        or power_states.get(
+            "idle"
+            if mode == "standby"
+            else mode
+        )
+    )
+
+    qualifier = str(
+        profile.get(
+            "qualifier"
+        )
+        or (
+            "≤"
+            if source_kind
+            == "nvme-controller-profile"
+            else "≈"
+        )
+    )
+
     return {
         "available": True,
         "watts": round(
@@ -9449,10 +9557,16 @@ def get_profile_power_estimate(
             ),
             4
         ),
-        "qualifier": "≈",
+        "qualifier": qualifier,
         "mode": mode,
-        "source": "manufacturer-datasheet",
+        "source": (
+            "nvme-controller-profile"
+            if source_kind
+            == "nvme-controller-profile"
+            else "manufacturer-datasheet"
+        ),
         "estimated": True,
+        "power_state": power_state_label,
         "profile_id": profile.get(
             "id"
         ),
@@ -9475,10 +9589,11 @@ def get_power_estimate(
     disk_type,
     transport,
     activity,
-    power_state
+    power_state,
+    size_bytes=None
 ):
 
-    if (
+    is_nvme = (
         str(
             transport
             or ""
@@ -9490,16 +9605,25 @@ def get_power_estimate(
         ).startswith(
             "nvme"
         )
-    ):
+    )
 
-        return get_nvme_power_estimate(
+    if is_nvme:
+
+        live_profile = get_nvme_power_estimate(
             device,
             activity
         )
 
+        if live_profile.get(
+            "available"
+        ):
+            return live_profile
+
     profile = match_power_profile(
         model,
-        disk_type
+        disk_type,
+        transport=transport,
+        size_bytes=size_bytes
     )
 
     return get_profile_power_estimate(
@@ -9686,7 +9810,8 @@ def get_disks():
             disk_type,
             transport,
             activity_payload,
-            power_state
+            power_state,
+            size_bytes=size_bytes
         )
 
         disks.append(
