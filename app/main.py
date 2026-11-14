@@ -2376,6 +2376,127 @@ def get_device_transport(
     return "unknown"
 
 
+def get_usb_link_info(
+    device_path
+):
+
+    try:
+
+        current = (
+            device_path
+            / "device"
+        ).resolve()
+
+        usb_device_path = None
+
+        for candidate in [
+            current,
+            *current.parents
+        ]:
+
+            if (
+                (candidate / "idVendor").is_file()
+                and
+                (candidate / "idProduct").is_file()
+            ):
+
+                usb_device_path = candidate
+                break
+
+        if usb_device_path is None:
+            return None
+
+        speed_raw = read_file(
+            usb_device_path / "speed"
+        )
+
+        max_power_raw = read_file(
+            usb_device_path / "bMaxPower"
+        )
+
+        try:
+            speed_mbps = (
+                float(
+                    speed_raw
+                )
+                if speed_raw
+                else None
+            )
+        except Exception:
+            speed_mbps = None
+
+        max_power_ma = None
+
+        if max_power_raw:
+
+            match = re.search(
+                r"([0-9.]+)\\s*mA",
+                str(
+                    max_power_raw
+                ),
+                re.IGNORECASE
+            )
+
+            if match:
+
+                try:
+                    max_power_ma = float(
+                        match.group(1)
+                    )
+                except Exception:
+                    max_power_ma = None
+
+        max_power_w = (
+            round(
+                5.0
+                * max_power_ma
+                / 1000.0,
+                3
+            )
+            if max_power_ma is not None
+            else None
+        )
+
+        return {
+            "manufacturer":
+                read_file(
+                    usb_device_path
+                    / "manufacturer"
+                ),
+            "product":
+                read_file(
+                    usb_device_path
+                    / "product"
+                ),
+            "id_vendor":
+                read_file(
+                    usb_device_path
+                    / "idVendor"
+                ),
+            "id_product":
+                read_file(
+                    usb_device_path
+                    / "idProduct"
+                ),
+            "speed_mbps":
+                speed_mbps,
+            "max_power_raw":
+                max_power_raw,
+            "max_power_ma":
+                max_power_ma,
+            "max_power_w":
+                max_power_w,
+            "runtime_status":
+                read_file(
+                    usb_device_path
+                    / "power/runtime_status"
+                )
+        }
+
+    except Exception:
+        return None
+
+
 def get_disk_type(
     device,
     device_path
@@ -10065,6 +10186,14 @@ def get_disks():
                 "usb_standby_config":
                     usb_standby_config,
 
+                "usb_link": (
+                    get_usb_link_info(
+                        device_path
+                    )
+                    if transport == "usb"
+                    else None
+                ),
+
                 "model": model,
 
                 "vendor": vendor,
@@ -12147,6 +12276,8 @@ def status(
         "usb_hdd_estimated_standby": True,
         "usb_hdd_per_drive_timer_config": True,
         "usb_hdd_no_hdparm_fallback": True,
+        "usb_link_descriptor_info": True,
+        "usb_link_descriptor_live_measurement": False,
         "storage_usage_cached": True,
         "storage_usage_refresh_seconds":
             STORAGE_USAGE_REFRESH_SECONDS,
