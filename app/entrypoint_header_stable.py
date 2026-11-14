@@ -365,28 +365,28 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.13"',
+        '"v0.32.105-beta.14"',
         1,
     )
 
     beta13_layout_patch = r"""
 <style id="disk-monitor-beta13-layout">
 /*
- * Beta 13:
+ * Beta 14:
  * FR/PT/ES USB-HDD cards need a little more room for the longer
  * auto-standby hint. Only the bottom edge grows; existing content
  * positions, widths and typography remain unchanged.
  */
-html:lang(fr) .disk-card:has(.usb-power-hint),
-html:lang(pt) .disk-card:has(.usb-power-hint),
-html:lang(es) .disk-card:has(.usb-power-hint) {
-    padding-bottom: 34px;
+html:lang(fr) .disk-column > .disk-card:not(.current-access-expanded),
+html:lang(pt) .disk-column > .disk-card:not(.current-access-expanded),
+html:lang(es) .disk-column > .disk-card:not(.current-access-expanded) {
+    height: calc(var(--disk-card-equal-height) + 12px);
 }
 
-html:lang(fr) .disk-card.compact:has(.usb-power-hint),
-html:lang(pt) .disk-card.compact:has(.usb-power-hint),
-html:lang(es) .disk-card.compact:has(.usb-power-hint) {
-    padding-bottom: 27px;
+html:lang(fr) .disk-column > .disk-card.compact:not(.current-access-expanded),
+html:lang(pt) .disk-column > .disk-card.compact:not(.current-access-expanded),
+html:lang(es) .disk-column > .disk-card.compact:not(.current-access-expanded) {
+    height: calc(var(--disk-card-equal-height) + 8px);
 }
 
 /*
