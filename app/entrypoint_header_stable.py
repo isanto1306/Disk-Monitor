@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.12"
-entrypoint.main.app.version = "0.22.43-beta.12"
+app.version = "0.22.43-beta.13"
+entrypoint.main.app.version = "0.22.43-beta.13"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,9 +365,54 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.12"',
+        '"v0.32.105-beta.13"',
         1,
     )
+
+    beta13_layout_patch = r"""
+<style id="disk-monitor-beta13-layout">
+/*
+ * Beta 13:
+ * FR/PT/ES USB-HDD cards need a little more room for the longer
+ * auto-standby hint. Only the bottom edge grows; existing content
+ * positions, widths and typography remain unchanged.
+ */
+html:lang(fr) .disk-card:has(.usb-power-hint),
+html:lang(pt) .disk-card:has(.usb-power-hint),
+html:lang(es) .disk-card:has(.usb-power-hint) {
+    padding-bottom: 34px;
+}
+
+html:lang(fr) .disk-card.compact:has(.usb-power-hint),
+html:lang(pt) .disk-card.compact:has(.usb-power-hint),
+html:lang(es) .disk-card.compact:has(.usb-power-hint) {
+    padding-bottom: 27px;
+}
+
+/*
+ * Keep the SMART label in its native place and center the status badge
+ * directly beneath it. For the normal OK state this aligns OK with SMART
+ * without changing the Watt block or the left POWER section.
+ */
+.disk-card
+.disk-footer > .footer-section:last-child {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+</style>
+"""
+
+    if (
+        "disk-monitor-beta13-layout"
+        not in entrypoint._index_html
+    ):
+        entrypoint._index_html = entrypoint._index_html.replace(
+            "</head>",
+            beta13_layout_patch
+            + "\n</head>",
+            1,
+        )
 
     if 'email-notifications.js?v=0.32.103' not in entrypoint._index_html:
         entrypoint._index_html = entrypoint._index_html.replace(
