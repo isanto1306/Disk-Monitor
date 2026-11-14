@@ -330,6 +330,13 @@ SMART_HISTORY_SAFE_INTERVAL_SECONDS = 30 * 60
 SMART_HISTORY_RETENTION_DAYS = 400
 SMART_HISTORY_MAX_API_POINTS = 5000
 
+# Estimated energy history is derived only from the same passive/live power
+# estimates already used by the dashboard. It does not perform additional
+# SMART/hdparm reads and therefore must not wake sleeping HDDs.
+POWER_ENERGY_SAMPLE_SECONDS = 60
+POWER_ENERGY_BUCKET_SECONDS = 5 * 60
+POWER_ENERGY_MAX_INTERVAL_SECONDS = 3 * 60
+
 # Automatic HDD SMART refresh is strictly no-wake. A read is only scheduled
 # after real block I/O proves that the HDD woke naturally. Before the delayed
 # read, the drive must still be confirmed awake by passive information.
@@ -352,6 +359,7 @@ disk_activity = {}
 disk_activity_state_last_save = 0.0
 smart_cache = {}
 smart_history_last_auto_read = {}
+power_energy_last_sample = {}
 manual_awake_until = {}
 
 smart_automation_config = {
@@ -4832,6 +4840,10 @@ async def startup_event():
         monitor_safe_smart_history()
     )
 
+    asyncio.create_task(
+        monitor_power_energy_history()
+    )
+
 
     asyncio.create_task(
         run_startup_smart_check()
@@ -8424,6 +8436,37 @@ def init_smart_history_db():
             """
         )
 
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS power_energy_history (
+                stable_id TEXT NOT NULL,
+                device TEXT NOT NULL,
+                bucket_start INTEGER NOT NULL,
+                energy_wh REAL NOT NULL DEFAULT 0,
+                sample_seconds REAL NOT NULL DEFAULT 0,
+                last_watts REAL,
+                last_mode TEXT,
+                source TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (
+                    stable_id,
+                    bucket_start
+                )
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+                idx_power_energy_history_time
+            ON power_energy_history (
+                stable_id,
+                bucket_start
+            )
+            """
+        )
+
         connection.commit()
 
 
@@ -8596,6 +8639,427 @@ def record_smart_history(
     return True
 
 
+def record_power_energy_sample(
+    stable_id,
+    device,
+    watts,
+    mode,
+    source,
+    recorded_epoch=None
+):
+
+    if not stable_id:
+        return False
+
+    try:
+        watts = float(
+            watts
+        )
+    except Exception:
+        return False
+
+    if (
+        not watts >= 0
+        or watts != watts
+    ):
+        return False
+
+    now_epoch = float(
+        recorded_epoch
+        if recorded_epoch is not None
+        else time.time()
+    )
+
+    previous = power_energy_last_sample.get(
+        stable_id
+    )
+
+    interval_seconds = 0.0
+    energy_wh = 0.0
+
+    if isinstance(
+        previous,
+        dict
+    ):
+
+        try:
+            previous_epoch = float(
+                previous.get(
+                    "epoch"
+                )
+            )
+            previous_watts = float(
+                previous.get(
+                    "watts"
+                )
+            )
+
+            interval_seconds = (
+                now_epoch
+                - previous_epoch
+            )
+
+            if (
+                interval_seconds > 0
+                and interval_seconds
+                <= POWER_ENERGY_MAX_INTERVAL_SECONDS
+            ):
+
+                average_watts = (
+                    previous_watts
+                    + watts
+                ) / 2.0
+
+                energy_wh = (
+                    average_watts
+                    * interval_seconds
+                    / 3600.0
+                )
+
+            else:
+                interval_seconds = 0.0
+
+        except Exception:
+            interval_seconds = 0.0
+            energy_wh = 0.0
+
+    power_energy_last_sample[
+        stable_id
+    ] = {
+        "epoch": now_epoch,
+        "watts": watts
+    }
+
+    bucket_start = int(
+        now_epoch
+        // POWER_ENERGY_BUCKET_SECONDS
+        * POWER_ENERGY_BUCKET_SECONDS
+    )
+
+    updated_at = datetime.fromtimestamp(
+        now_epoch,
+        timezone.utc
+    ).isoformat()
+
+    with smart_history_connect() as connection:
+
+        connection.execute(
+            """
+            INSERT INTO power_energy_history (
+                stable_id,
+                device,
+                bucket_start,
+                energy_wh,
+                sample_seconds,
+                last_watts,
+                last_mode,
+                source,
+                updated_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ON CONFLICT (
+                stable_id,
+                bucket_start
+            )
+            DO UPDATE SET
+                device = excluded.device,
+                energy_wh = (
+                    power_energy_history.energy_wh
+                    + excluded.energy_wh
+                ),
+                sample_seconds = (
+                    power_energy_history.sample_seconds
+                    + excluded.sample_seconds
+                ),
+                last_watts = excluded.last_watts,
+                last_mode = excluded.last_mode,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                stable_id,
+                device,
+                bucket_start,
+                round(
+                    energy_wh,
+                    8
+                ),
+                round(
+                    interval_seconds,
+                    3
+                ),
+                round(
+                    watts,
+                    6
+                ),
+                str(
+                    mode
+                    or ""
+                ),
+                str(
+                    source
+                    or ""
+                ),
+                updated_at
+            )
+        )
+
+        connection.commit()
+
+    return True
+
+
+def get_power_energy_summary(
+    stable_id,
+    range_name
+):
+
+    range_seconds = (
+        get_smart_history_range_seconds(
+            range_name
+        )
+    )
+
+    now_epoch = time.time()
+    cutoff_epoch = (
+        now_epoch
+        - range_seconds
+    )
+
+    bucket_cutoff = int(
+        cutoff_epoch
+        // POWER_ENERGY_BUCKET_SECONDS
+        * POWER_ENERGY_BUCKET_SECONDS
+    )
+
+    with smart_history_connect() as connection:
+
+        row = connection.execute(
+            """
+            SELECT
+                COUNT(*) AS bucket_count,
+                COALESCE(
+                    SUM(energy_wh),
+                    0
+                ) AS energy_wh,
+                COALESCE(
+                    SUM(sample_seconds),
+                    0
+                ) AS sample_seconds,
+                MIN(bucket_start) AS first_bucket,
+                MAX(bucket_start) AS last_bucket
+            FROM power_energy_history
+            WHERE
+                stable_id = ?
+                AND bucket_start >= ?
+            """,
+            (
+                stable_id,
+                bucket_cutoff
+            )
+        ).fetchone()
+
+        first_ever = connection.execute(
+            """
+            SELECT
+                MIN(bucket_start)
+            FROM power_energy_history
+            WHERE stable_id = ?
+            """,
+            (
+                stable_id,
+            )
+        ).fetchone()
+
+    bucket_count = int(
+        row["bucket_count"]
+        or 0
+    )
+
+    energy_wh = float(
+        row["energy_wh"]
+        or 0
+    )
+
+    sample_seconds = float(
+        row["sample_seconds"]
+        or 0
+    )
+
+    first_bucket = (
+        row["first_bucket"]
+        if row["first_bucket"]
+        is not None
+        else None
+    )
+
+    first_ever_epoch = (
+        first_ever[0]
+        if (
+            first_ever
+            and first_ever[0]
+            is not None
+        )
+        else None
+    )
+
+    recording_started_at = (
+        datetime.fromtimestamp(
+            float(
+                first_ever_epoch
+            ),
+            timezone.utc
+        ).isoformat()
+        if first_ever_epoch
+        is not None
+        else None
+    )
+
+    return {
+        "available": (
+            bucket_count > 0
+        ),
+        "estimated": True,
+        "electrically_measured": False,
+        "range": range_name,
+        "energy_wh": round(
+            energy_wh,
+            4
+        ),
+        "energy_kwh": round(
+            energy_wh / 1000.0,
+            6
+        ),
+        "covered_seconds": round(
+            sample_seconds,
+            1
+        ),
+        "bucket_seconds":
+            POWER_ENERGY_BUCKET_SECONDS,
+        "bucket_count": bucket_count,
+        "first_bucket": first_bucket,
+        "last_bucket": (
+            row["last_bucket"]
+            if row["last_bucket"]
+            is not None
+            else None
+        ),
+        "recording_started_at":
+            recording_started_at
+    }
+
+
+async def monitor_power_energy_history():
+
+    # Let the one-second disk activity monitor establish its first counters.
+    await asyncio.sleep(
+        5
+    )
+
+    while True:
+
+        current_stable_ids = set()
+
+        try:
+
+            disks = await asyncio.to_thread(
+                get_disks
+            )
+
+            now_epoch = time.time()
+
+            for disk in disks:
+
+                if not isinstance(
+                    disk,
+                    dict
+                ):
+                    continue
+
+                stable_id = disk.get(
+                    "stable_id"
+                )
+
+                if not stable_id:
+                    continue
+
+                current_stable_ids.add(
+                    stable_id
+                )
+
+                estimate = disk.get(
+                    "power_estimate"
+                )
+
+                if (
+                    not isinstance(
+                        estimate,
+                        dict
+                    )
+                    or not estimate.get(
+                        "available"
+                    )
+                ):
+
+                    power_energy_last_sample.pop(
+                        stable_id,
+                        None
+                    )
+                    continue
+
+                watts = estimate.get(
+                    "watts"
+                )
+
+                try:
+                    numeric_watts = float(
+                        watts
+                    )
+                except Exception:
+                    power_energy_last_sample.pop(
+                        stable_id,
+                        None
+                    )
+                    continue
+
+                record_power_energy_sample(
+                    stable_id,
+                    str(
+                        disk.get(
+                            "device"
+                        )
+                        or ""
+                    ),
+                    numeric_watts,
+                    estimate.get(
+                        "mode"
+                    ),
+                    estimate.get(
+                        "source"
+                    ),
+                    recorded_epoch=now_epoch
+                )
+
+        except Exception:
+            pass
+
+        for stable_id in list(
+            power_energy_last_sample.keys()
+        ):
+
+            if stable_id not in current_stable_ids:
+
+                power_energy_last_sample.pop(
+                    stable_id,
+                    None
+                )
+
+        await asyncio.sleep(
+            POWER_ENERGY_SAMPLE_SECONDS
+        )
+
+
 def prune_smart_history():
 
     cutoff = datetime.fromtimestamp(
@@ -8615,6 +9079,24 @@ def prune_smart_history():
             WHERE recorded_at < ?
             """,
             (cutoff,)
+        )
+
+        power_cutoff = int(
+            time.time()
+            - SMART_HISTORY_RETENTION_DAYS
+            * 24
+            * 60
+            * 60
+        )
+
+        connection.execute(
+            """
+            DELETE FROM power_energy_history
+            WHERE bucket_start < ?
+            """,
+            (
+                power_cutoff,
+            )
         )
 
         connection.commit()
@@ -8770,7 +9252,12 @@ def get_smart_history(
             SMART_HISTORY_SAFE_INTERVAL_SECONDS,
         "sample_count": len(samples),
         "available_metrics": available_metrics,
-        "samples": samples
+        "samples": samples,
+        "power_energy":
+            get_power_energy_summary(
+                stable_id,
+                range_name
+            )
     }
 
 
@@ -12303,6 +12790,11 @@ def status(
             SMART_HISTORY_SAFE_INTERVAL_SECONDS,
         "smart_history_automatic_hdd_reads": False,
         "smart_history_usb_partial_smart_values": True,
+        "power_energy_history": True,
+        "power_energy_history_estimated": True,
+        "power_energy_history_electrically_measured": False,
+        "power_energy_sample_seconds":
+            POWER_ENERGY_SAMPLE_SECONDS,
         "manual_smart_read_uses_smart_as_authority": True,
         "manual_smart_wake_verification_is_nonblocking": True,
         "manual_smart_state_overrides_stale_standby": True,

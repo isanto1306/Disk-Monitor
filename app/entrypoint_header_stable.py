@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.11"
-entrypoint.main.app.version = "0.22.43-beta.11"
+app.version = "0.22.43-beta.12"
+entrypoint.main.app.version = "0.22.43-beta.12"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.11"',
+        '"v0.32.105-beta.12"',
         1,
     )
 
@@ -745,7 +745,7 @@ if entrypoint._index_html is not None:
 
 
     live_power_beta_patch = r"""
-<style id="disk-monitor-live-power-beta11-style">
+<style id="disk-monitor-live-power-beta12-style">
 .power-estimate-live {
     display: inline-flex;
     align-items: center;
@@ -833,7 +833,7 @@ if entrypoint._index_html is not None:
 }
 
 /*
- * Beta 11: only the Watt indicator moves. SMART label and SMART badge stay
+ * Beta 12: only the Watt indicator moves. SMART label and SMART badge stay
  * exactly where the native card layout puts them.
  */
 .disk-card
@@ -874,7 +874,7 @@ if entrypoint._index_html is not None:
  * The native USB timer / ETA hint remains unchanged below the power row.
  */
 </style>
-<script id="disk-monitor-live-power-beta11">
+<script id="disk-monitor-live-power-beta12">
 (() => {
     if (
         typeof renderStandbySince !== "function"
@@ -1349,7 +1349,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-live-power-beta11"
+        "disk-monitor-live-power-beta12"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
@@ -1730,6 +1730,361 @@ if entrypoint._index_html is not None:
         entrypoint._index_html = entrypoint._index_html.replace(
             "</body>",
             usb_detail_beta_patch
+            + "\n</body>",
+            1,
+        )
+
+
+    power_energy_history_patch = r"""
+<style id="disk-monitor-power-energy-history-beta12-style">
+.smart-history-power-energy-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin: -2px 0 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(67, 87, 107, .38);
+    border-radius: 9px;
+    background: rgba(25, 38, 50, .58);
+}
+
+.smart-history-power-energy-copy {
+    min-width: 0;
+}
+
+.smart-history-power-energy-label {
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.smart-history-power-energy-since {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 10.5px;
+    line-height: 1.35;
+}
+
+.smart-history-power-energy-value {
+    flex: 0 0 auto;
+    color: #e3ebf1;
+    font-size: 17px;
+    font-weight: 760;
+    white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+    .smart-history-power-energy-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 7px;
+    }
+}
+</style>
+<script id="disk-monitor-power-energy-history-beta12">
+(() => {
+    if (
+        typeof renderSmartHistoryModal !== "function"
+        || typeof smartHistoryKey !== "function"
+        || typeof state === "undefined"
+    ) {
+        return;
+    }
+
+    const powerEnergyText = key => {
+        const language = String(
+            state.language
+            || document.documentElement.lang
+            || navigator.language
+            || "en"
+        ).toLowerCase().slice(0, 2);
+
+        const translations = {
+            de: {
+                label: "Verbrauch (geschätzt)",
+                since: "Aufzeichnung seit",
+                noData: "Noch keine Verbrauchsdaten"
+            },
+            en: {
+                label: "Energy use (estimated)",
+                since: "Recording since",
+                noData: "No energy data yet"
+            },
+            fr: {
+                label: "Consommation (estimée)",
+                since: "Enregistrement depuis",
+                noData: "Pas encore de données de consommation"
+            },
+            pt: {
+                label: "Consumo (estimado)",
+                since: "Registo desde",
+                noData: "Ainda sem dados de consumo"
+            },
+            es: {
+                label: "Consumo (estimado)",
+                since: "Registro desde",
+                noData: "Aún no hay datos de consumo"
+            }
+        };
+
+        return (
+            translations[language]
+            || translations.en
+        )[key];
+    };
+
+    const formatPowerEnergy = energy => {
+        const wh = Number(
+            energy
+            && energy.energy_wh
+        );
+
+        if (!Number.isFinite(wh)) {
+            return powerEnergyText(
+                "noData"
+            );
+        }
+
+        const locale = (
+            document.documentElement.lang
+            || navigator.language
+            || undefined
+        );
+
+        if (wh >= 1000) {
+            return (
+                "≈ "
+                + new Intl.NumberFormat(
+                    locale,
+                    {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }
+                ).format(
+                    wh / 1000
+                )
+                + " kWh"
+            );
+        }
+
+        return (
+            "≈ "
+            + new Intl.NumberFormat(
+                locale,
+                {
+                    minimumFractionDigits: (
+                        wh < 10
+                            ? 2
+                            : 1
+                    ),
+                    maximumFractionDigits: 2
+                }
+            ).format(
+                wh
+            )
+            + " Wh"
+        );
+    };
+
+    const formatRecordingStart = value => {
+        if (!value) {
+            return "";
+        }
+
+        const date = new Date(
+            value
+        );
+
+        if (!Number.isFinite(
+            date.getTime()
+        )) {
+            return "";
+        }
+
+        try {
+            return new Intl.DateTimeFormat(
+                document.documentElement.lang
+                || navigator.language
+                || undefined,
+                {
+                    dateStyle: "short",
+                    timeStyle: "short"
+                }
+            ).format(
+                date
+            );
+        }
+        catch (_) {
+            return date.toLocaleString();
+        }
+    };
+
+    const injectPowerEnergyRow = () => {
+        const body = document.getElementById(
+            "smartHistoryModalBody"
+        );
+
+        if (!body) {
+            return;
+        }
+
+        body.querySelectorAll(
+            ".smart-history-power-energy-row"
+        ).forEach(
+            element => element.remove()
+        );
+
+        const device =
+            state.smartHistoryModalDevice;
+
+        const range =
+            state.smartHistoryRange;
+
+        if (!device || !range) {
+            return;
+        }
+
+        const history =
+            state.smartHistoryCache[
+                smartHistoryKey(
+                    device,
+                    range
+                )
+            ];
+
+        if (
+            !history
+            || typeof history !== "object"
+        ) {
+            return;
+        }
+
+        const energy = (
+            history.power_energy
+            && typeof history.power_energy
+            === "object"
+        )
+            ? history.power_energy
+            : null;
+
+        const ranges = body.querySelector(
+            ".smart-history-modal-ranges"
+        );
+
+        if (!ranges) {
+            return;
+        }
+
+        const row = document.createElement(
+            "div"
+        );
+
+        row.className =
+            "smart-history-power-energy-row";
+
+        const copy = document.createElement(
+            "div"
+        );
+
+        copy.className =
+            "smart-history-power-energy-copy";
+
+        const label = document.createElement(
+            "div"
+        );
+
+        label.className =
+            "smart-history-power-energy-label";
+
+        label.textContent =
+            powerEnergyText(
+                "label"
+            );
+
+        copy.appendChild(
+            label
+        );
+
+        const recordingStart =
+            formatRecordingStart(
+                energy
+                && energy.recording_started_at
+            );
+
+        if (recordingStart) {
+            const since =
+                document.createElement(
+                    "div"
+                );
+
+            since.className =
+                "smart-history-power-energy-since";
+
+            since.textContent = (
+                powerEnergyText(
+                    "since"
+                )
+                + " "
+                + recordingStart
+            );
+
+            copy.appendChild(
+                since
+            );
+        }
+
+        const value = document.createElement(
+            "div"
+        );
+
+        value.className =
+            "smart-history-power-energy-value";
+
+        value.textContent = (
+            energy
+            && energy.available
+                ? formatPowerEnergy(
+                    energy
+                )
+                : powerEnergyText(
+                    "noData"
+                )
+        );
+
+        row.appendChild(
+            copy
+        );
+
+        row.appendChild(
+            value
+        );
+
+        ranges.insertAdjacentElement(
+            "afterend",
+            row
+        );
+    };
+
+    const originalRenderSmartHistoryModal =
+        renderSmartHistoryModal;
+
+    renderSmartHistoryModal = function() {
+        originalRenderSmartHistoryModal();
+        injectPowerEnergyRow();
+    };
+})();
+</script>
+"""
+
+    if (
+        "disk-monitor-power-energy-history-beta12"
+        not in entrypoint._index_html
+    ):
+        entrypoint._index_html = entrypoint._index_html.replace(
+            "</body>",
+            power_energy_history_patch
             + "\n</body>",
             1,
         )
