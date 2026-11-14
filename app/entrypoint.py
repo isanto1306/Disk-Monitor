@@ -574,7 +574,11 @@ ROOT_HTML_AFFILIATE_PREVIEW = r"""
     es:{label:"Publicidad · Enlace de afiliado",banner:"Apoya el desarrollo con DDownload",open:"Abrir DDownload",title:"Apoya Disk Monitor",body:"Disk Monitor sigue siendo gratuito. Una compra mediante este enlace de afiliado de DDownload puede generar una comisión para el desarrollador.",close:"Cerrar"}
   };
   function language(){
-    const codes=[document.documentElement.lang,navigator.language];
+    const codes=[
+      (typeof state!=="undefined"&&state&&state.language)||"",
+      document.documentElement.lang,
+      navigator.language
+    ];
     for(const code of codes){const key=String(code||"").slice(0,2).toLowerCase();if(strings[key])return key;}
     return "en";
   }
@@ -594,6 +598,34 @@ ROOT_HTML_AFFILIATE_PREVIEW = r"""
     const copy=node("div","dm-dd-copy");
     copy.append(node("span","dm-dd-label",t.label),node("span","",t.banner));
     banner.append(copy,link(t));document.body.append(banner);
+    // Track the app's actual language, not the browser's original locale.
+    // Disk Monitor updates state.language without necessarily reloading.
+    let renderedLanguage=language();
+    const syncLanguage=()=>{
+      const next=language();
+      if(next===renderedLanguage)return;
+      renderedLanguage=next;
+      const translated=strings[next];
+      banner.setAttribute("aria-label",translated.label);
+      const label=copy.querySelector(".dm-dd-label");
+      if(label)label.textContent=translated.label;
+      const message=copy.querySelector("span:not(.dm-dd-label)");
+      if(message)message.textContent=translated.banner;
+      const bannerLink=banner.querySelector("a");
+      if(bannerLink)bannerLink.textContent=translated.open;
+      const modal=document.getElementById("dm-dd-modal");
+      if(modal){
+        const heading=modal.querySelector("h2");
+        const paragraph=modal.querySelector("p");
+        const modalLink=modal.querySelector("a");
+        const close=modal.querySelector("button");
+        if(heading)heading.textContent=translated.title;
+        if(paragraph)paragraph.textContent=translated.body;
+        if(modalLink)modalLink.textContent=translated.open;
+        if(close)close.textContent=translated.close;
+      }
+    };
+    window.setInterval(syncLanguage,300);
     const key="disk-monitor-ddownload-daily-notice-v1";
     let last=0;
     try{last=Number(localStorage.getItem(key)||0)}catch(_){}
