@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.7"
-entrypoint.main.app.version = "0.22.43-beta.7"
+app.version = "0.22.43-beta.8"
+entrypoint.main.app.version = "0.22.43-beta.8"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.7"',
+        '"v0.32.105-beta.8"',
         1,
     )
 
@@ -745,7 +745,7 @@ if entrypoint._index_html is not None:
 
 
     live_power_beta_patch = r"""
-<style id="disk-monitor-live-power-beta7-style">
+<style id="disk-monitor-live-power-beta8-style">
 .power-estimate-live {
     display: inline-flex;
     align-items: center;
@@ -833,11 +833,48 @@ if entrypoint._index_html is not None:
 }
 
 /*
- * Beta 7 restores the native USB timer / ETA hint below the power row.
- * renderUsbPowerHint() remains the source of the displayed text.
+ * Beta 8: only the Watt indicator moves. SMART label and SMART badge stay
+ * exactly where the native card layout puts them.
+ */
+.disk-card:not(.compact):not(.current-access-expanded)
+.disk-footer > .footer-section:last-child {
+    position: relative;
+}
+
+.disk-card:not(.compact):not(.current-access-expanded)
+.disk-footer > .footer-section:last-child > .power-estimate-live {
+    position: absolute;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 0.8rem 4.4rem;
+    align-items: center;
+    column-gap: 0.2rem;
+    width: 5.4rem;
+    min-width: 5.4rem;
+    margin: 0;
+    font-size: 10px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.disk-card:not(.compact):not(.current-access-expanded)
+.disk-footer > .footer-section:last-child > .power-estimate-live > span:first-child {
+    width: 0.8rem;
+    text-align: left;
+}
+
+.disk-card:not(.compact):not(.current-access-expanded)
+.disk-footer > .footer-section:last-child > .power-estimate-live > span:last-child {
+    width: 4.4rem;
+    text-align: left;
+    white-space: nowrap;
+}
+
+/*
+ * The native USB timer / ETA hint remains unchanged below the power row.
  */
 </style>
-<script id="disk-monitor-live-power-beta7">
+<script id="disk-monitor-live-power-beta8">
 (() => {
     if (
         typeof renderStandbySince !== "function"
@@ -1192,12 +1229,150 @@ if entrypoint._index_html is not None:
             )
         );
     };
+
+    /*
+     * Move only the Watt element beside the existing SMART badge.
+     * The badge itself is never wrapped, moved or restyled.
+     */
+    let powerPlacementFrame = null;
+
+    const placePowerBesideSmart = () => {
+        powerPlacementFrame = null;
+
+        document.querySelectorAll(
+            ".disk-card"
+        ).forEach(card => {
+            const watt = card.querySelector(
+                ".power-estimate-live"
+            );
+            const powerRow = card.querySelector(
+                ".power-status-row"
+            );
+
+            if (!watt || !powerRow) {
+                return;
+            }
+
+            const eligible = card.matches(
+                ".disk-card:not(.compact):not(.current-access-expanded)"
+            );
+
+            if (!eligible) {
+                if (
+                    watt.parentElement
+                    !== powerRow
+                ) {
+                    powerRow.appendChild(
+                        watt
+                    );
+                }
+
+                watt.style.removeProperty(
+                    "right"
+                );
+                watt.style.removeProperty(
+                    "top"
+                );
+                return;
+            }
+
+            const smartSection = card.querySelector(
+                ".disk-footer > .footer-section:last-child"
+            );
+
+            if (!smartSection) {
+                return;
+            }
+
+            const smartBadge = smartSection.querySelector(
+                ":scope > .status-badge"
+            );
+
+            if (!smartBadge) {
+                return;
+            }
+
+            if (
+                watt.parentElement
+                !== smartSection
+            ) {
+                smartSection.appendChild(
+                    watt
+                );
+            }
+
+            /*
+             * Keep SMART/OK untouched. Position the fixed-width Watt block
+             * exactly 15 px to the left of the badge and vertically centered
+             * against it.
+             */
+            const sectionRect =
+                smartSection.getBoundingClientRect();
+            const badgeRect =
+                smartBadge.getBoundingClientRect();
+
+            watt.style.right = (
+                sectionRect.right
+                - badgeRect.left
+                + 15
+            ) + "px";
+
+            const top = (
+                smartBadge.offsetTop
+                + (
+                    smartBadge.offsetHeight
+                    - watt.offsetHeight
+                ) / 2
+            );
+
+            watt.style.top =
+                Math.max(
+                    0,
+                    top
+                ) + "px";
+        });
+    };
+
+    const schedulePowerPlacement = () => {
+        if (
+            powerPlacementFrame
+            !== null
+        ) {
+            return;
+        }
+
+        powerPlacementFrame =
+            window.requestAnimationFrame(
+                placePowerBesideSmart
+            );
+    };
+
+    new MutationObserver(
+        schedulePowerPlacement
+    ).observe(
+        document.body,
+        {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: [
+                "class"
+            ]
+        }
+    );
+
+    window.addEventListener(
+        "resize",
+        schedulePowerPlacement
+    );
+
+    schedulePowerPlacement();
 })();
 </script>
 """
 
     if (
-        "disk-monitor-live-power-beta7"
+        "disk-monitor-live-power-beta8"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
