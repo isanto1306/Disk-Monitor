@@ -1194,7 +1194,7 @@ if entrypoint._index_html is not None:
 
 
     usb_detail_beta_patch = r"""
-<style id="disk-monitor-usb-detail-beta5-style">
+<style id="disk-monitor-usb-detail-beta6-style">
 .usb-link-detail-row td {
     border-top: 1px solid rgba(67, 87, 107, .28);
 }
@@ -1211,7 +1211,7 @@ if entrypoint._index_html is not None:
     margin-top: 0;
 }
 </style>
-<script id="disk-monitor-usb-detail-beta5">
+<script id="disk-monitor-usb-detail-beta6">
 (() => {
     if (
         typeof renderDiskDetails !== "function"
@@ -1557,7 +1557,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-usb-detail-beta5"
+        "disk-monitor-usb-detail-beta6"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
