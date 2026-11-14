@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.5"
-entrypoint.main.app.version = "0.22.43-beta.5"
+app.version = "0.22.43-beta.6"
+entrypoint.main.app.version = "0.22.43-beta.6"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.5"',
+        '"v0.32.105-beta.6"',
         1,
     )
 
@@ -745,7 +745,7 @@ if entrypoint._index_html is not None:
 
 
     live_power_beta_patch = r"""
-<style id="disk-monitor-live-power-beta5-style">
+<style id="disk-monitor-live-power-beta6-style">
 .power-estimate-live {
     display: inline-flex;
     align-items: center;
@@ -764,8 +764,65 @@ if entrypoint._index_html is not None:
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
 }
+
+/*
+ * Beta 6: keep Status / seit-wartet / Watt in fixed columns.
+ * The Watt slot no longer moves when the time text appears or disappears.
+ */
+.disk-card:not(.compact):not(.current-access-expanded)
+.disk-footer > .footer-section:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.disk-card:not(.compact):not(.current-access-expanded)
+.disk-footer > .footer-section:last-child {
+    flex: 0 0 auto;
+}
+
+.disk-card:not(.compact):not(.current-access-expanded)
+.power-status-row {
+    display: grid;
+    grid-template-columns:
+        max-content
+        minmax(3rem, 1fr)
+        6.9rem;
+    align-items: center;
+    column-gap: 7px;
+    width: 100%;
+    min-width: 0;
+    flex-wrap: nowrap;
+}
+
+.disk-card:not(.compact):not(.current-access-expanded)
+.power-status-row > .status-badge {
+    grid-column: 1;
+}
+
+.disk-card:not(.compact):not(.current-access-expanded)
+.power-status-row > .standby-since-time {
+    grid-column: 2;
+    justify-self: end;
+    margin-top: 0;
+}
+
+.disk-card:not(.compact):not(.current-access-expanded)
+.power-status-row > .power-estimate-live {
+    grid-column: 3;
+    justify-self: end;
+    margin-left: 0;
+}
+
+/*
+ * The USB timer/ETA hint duplicated the state already visible in the status
+ * row and changed card geometry. Keep the USB configuration in details, but
+ * do not render the extra hint line on disk cards.
+ */
+.disk-card .usb-power-hint {
+    display: none !important;
+}
 </style>
-<script id="disk-monitor-live-power-beta5">
+<script id="disk-monitor-live-power-beta6">
 (() => {
     if (
         typeof renderStandbySince !== "function"
@@ -1042,13 +1099,34 @@ if entrypoint._index_html is not None:
             !estimate
             || !estimate.available
         ) {
+            const diskType = String(
+                (
+                    disk
+                    && typeof disk === "object"
+                        ? disk.type
+                        : ""
+                )
+                || ""
+            ).toUpperCase();
+
+            /*
+             * Flash / SD media has no live electrical measurement here.
+             * Show an explicit approximate zero instead of a dash so the
+             * fixed Watt slot remains visually complete.
+             */
+            const unavailableValue = (
+                diskType === "FLASH"
+                    ? "≈ 0 W"
+                    : "—"
+            );
+
             return `
                 <span
                     class="power-estimate-live"
                     title="${escapeHtml(powerNote())}"
                 >
                     <span aria-hidden="true">⚡</span>
-                    <span>—</span>
+                    <span>${escapeHtml(unavailableValue)}</span>
                 </span>
             `;
         }
@@ -1104,7 +1182,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-live-power-beta5"
+        "disk-monitor-live-power-beta6"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
