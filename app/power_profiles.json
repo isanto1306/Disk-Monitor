@@ -29,13 +29,15 @@
       "transport": "ata",
       "watts": {
         "active": 10.5,
-        "idle": 7.2
+        "idle": 7.2,
+        "standby": 1.2
       },
       "source": {
-        "kind": "manufacturer",
-        "label": "Seagate Exos 26 TB",
+        "kind": "manufacturer-plus-family-estimate",
+        "label": "Seagate Exos 26 TB (standby family estimate)",
         "url": "https://www.seagate.com/content/dam/seagate/en/content-fragments/products/datasheets/exos-recertified/exos-recertified-1--en_US.pdf"
-      }
+      },
+      "notes": "Active/idle values come from the manufacturer datasheet. Standby 1.2 W is an approximate family value based on comparable large-capacity Seagate Exos models; it is not a model-specific ST26000NM000C datasheet value."
     },
     {
       "id": "wd-red-4tb-wd40efrx",
@@ -55,6 +57,28 @@
         "label": "Western Digital WD Red 4 TB",
         "url": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/wd/product/internal-storage/wd-red/data-sheet-wd-red.pdf"
       }
+    },
+    {
+      "id": "wd-elements-4tb-usb-family-estimate",
+      "model_prefixes": [
+        "Elements 2667",
+        "Elements 25A1",
+        "Elements 2620"
+      ],
+      "device_type": "HDD",
+      "transport": "usb",
+      "size_tb_min": 3.5,
+      "size_tb_max": 4.5,
+      "watts": {
+        "active": 4.4,
+        "idle": 3.3,
+        "standby": 0.4
+      },
+      "source": {
+        "kind": "family-estimate",
+        "label": "WD Elements 4 TB family estimate"
+      },
+      "notes": "Approximate dashboard values only. They are not electrically measured and are not claimed as model-specific WD Elements datasheet values."
     },
     {
       "id": "samsung-870-qvo-8tb",
