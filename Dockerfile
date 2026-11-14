@@ -8,7 +8,8 @@ WORKDIR /app
 
 RUN apk add --no-cache \
     smartmontools \
-    hdparm
+    hdparm \
+    nvme-cli
 
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
@@ -17,6 +18,7 @@ COPY app/main.py /app/main.py
 COPY app/entrypoint.py /app/entrypoint.py
 COPY app/entrypoint_header_stable.py /app/entrypoint_header_stable.py
 COPY app/email_notifications.py /app/email_notifications.py
+COPY app/power_profiles.json /app/power_profiles.json
 COPY static/ /app/static/
 RUN python -m py_compile /app/main.py /app/entrypoint.py /app/entrypoint_header_stable.py /app/email_notifications.py
 RUN mkdir -p /app/cache

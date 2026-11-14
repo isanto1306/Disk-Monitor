@@ -186,8 +186,49 @@ SMART_FULL_CHECK_STATE_FILE = Path(
 SMART_AUTOMATION_CONFIG_FILE = Path(
     "/app/cache/smart_automation_config.json"
 )
+POWER_PROFILES_FILE = Path(
+    "/app/power_profiles.json"
+)
+POWER_PROFILES_REMOTE_CACHE_FILE = Path(
+    "/app/cache/power_profiles_remote.json"
+)
+POWER_PROFILES_REMOTE_URL = os.getenv(
+    "DISK_MONITOR_POWER_PROFILE_URL",
+    (
+        "https://raw.githubusercontent.com/"
+        "isanto1306/Disk-Monitor/"
+        "power-data/power_profiles.json"
+    )
+).strip()
+POWER_PROFILES_REFRESH_SECONDS = max(
+    3600,
+    int(
+        os.getenv(
+            "DISK_MONITOR_POWER_PROFILE_REFRESH_SECONDS",
+            "86400"
+        )
+    )
+)
+POWER_PROFILES_REMOTE_TIMEOUT_SECONDS = max(
+    1.0,
+    float(
+        os.getenv(
+            "DISK_MONITOR_POWER_PROFILE_TIMEOUT_SECONDS",
+            "5"
+        )
+    )
+)
 HOST_ROOT = HOST_PROC / "1/root"
 CGROUP_ROOT = Path("/sys/fs/cgroup")
+
+POWER_PROFILES_CACHE = None
+POWER_PROFILES_SOURCE = "bundled"
+POWER_PROFILES_LAST_REMOTE_CHECK = None
+POWER_PROFILES_LAST_REMOTE_UPDATE = None
+POWER_PROFILES_LAST_REMOTE_ERROR = None
+POWER_PROFILES_LOCK = threading.Lock()
+NVME_POWER_PROFILE_CACHE = {}
+NVME_POWER_PROFILE_LOCK = threading.Lock()
 
 SMART_FULL_CHECK_LOCK = threading.Lock()
 SMART_FULL_CHECK_STATE = {
@@ -289,6 +330,13 @@ SMART_HISTORY_SAFE_INTERVAL_SECONDS = 30 * 60
 SMART_HISTORY_RETENTION_DAYS = 400
 SMART_HISTORY_MAX_API_POINTS = 5000
 
+# Estimated energy history is derived only from the same passive/live power
+# estimates already used by the dashboard. It does not perform additional
+# SMART/hdparm reads and therefore must not wake sleeping HDDs.
+POWER_ENERGY_SAMPLE_SECONDS = 60
+POWER_ENERGY_BUCKET_SECONDS = 5 * 60
+POWER_ENERGY_MAX_INTERVAL_SECONDS = 3 * 60
+
 # Automatic HDD SMART refresh is strictly no-wake. A read is only scheduled
 # after real block I/O proves that the HDD woke naturally. Before the delayed
 # read, the drive must still be confirmed awake by passive information.
@@ -311,6 +359,7 @@ disk_activity = {}
 disk_activity_state_last_save = 0.0
 smart_cache = {}
 smart_history_last_auto_read = {}
+power_energy_last_sample = {}
 manual_awake_until = {}
 
 smart_automation_config = {
@@ -2333,6 +2382,127 @@ def get_device_transport(
         pass
 
     return "unknown"
+
+
+def get_usb_link_info(
+    device_path
+):
+
+    try:
+
+        current = (
+            device_path
+            / "device"
+        ).resolve()
+
+        usb_device_path = None
+
+        for candidate in [
+            current,
+            *current.parents
+        ]:
+
+            if (
+                (candidate / "idVendor").is_file()
+                and
+                (candidate / "idProduct").is_file()
+            ):
+
+                usb_device_path = candidate
+                break
+
+        if usb_device_path is None:
+            return None
+
+        speed_raw = read_file(
+            usb_device_path / "speed"
+        )
+
+        max_power_raw = read_file(
+            usb_device_path / "bMaxPower"
+        )
+
+        try:
+            speed_mbps = (
+                float(
+                    speed_raw
+                )
+                if speed_raw
+                else None
+            )
+        except Exception:
+            speed_mbps = None
+
+        max_power_ma = None
+
+        if max_power_raw:
+
+            match = re.search(
+                r"([0-9.]+)\s*mA",
+                str(
+                    max_power_raw
+                ),
+                re.IGNORECASE
+            )
+
+            if match:
+
+                try:
+                    max_power_ma = float(
+                        match.group(1)
+                    )
+                except Exception:
+                    max_power_ma = None
+
+        max_power_w = (
+            round(
+                5.0
+                * max_power_ma
+                / 1000.0,
+                3
+            )
+            if max_power_ma is not None
+            else None
+        )
+
+        return {
+            "manufacturer":
+                read_file(
+                    usb_device_path
+                    / "manufacturer"
+                ),
+            "product":
+                read_file(
+                    usb_device_path
+                    / "product"
+                ),
+            "id_vendor":
+                read_file(
+                    usb_device_path
+                    / "idVendor"
+                ),
+            "id_product":
+                read_file(
+                    usb_device_path
+                    / "idProduct"
+                ),
+            "speed_mbps":
+                speed_mbps,
+            "max_power_raw":
+                max_power_raw,
+            "max_power_ma":
+                max_power_ma,
+            "max_power_w":
+                max_power_w,
+            "runtime_status":
+                read_file(
+                    usb_device_path
+                    / "power/runtime_status"
+                )
+        }
+
+    except Exception:
+        return None
 
 
 def get_disk_type(
@@ -4668,6 +4838,10 @@ async def startup_event():
 
     asyncio.create_task(
         monitor_safe_smart_history()
+    )
+
+    asyncio.create_task(
+        monitor_power_energy_history()
     )
 
 
@@ -8262,6 +8436,37 @@ def init_smart_history_db():
             """
         )
 
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS power_energy_history (
+                stable_id TEXT NOT NULL,
+                device TEXT NOT NULL,
+                bucket_start INTEGER NOT NULL,
+                energy_wh REAL NOT NULL DEFAULT 0,
+                sample_seconds REAL NOT NULL DEFAULT 0,
+                last_watts REAL,
+                last_mode TEXT,
+                source TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (
+                    stable_id,
+                    bucket_start
+                )
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+                idx_power_energy_history_time
+            ON power_energy_history (
+                stable_id,
+                bucket_start
+            )
+            """
+        )
+
         connection.commit()
 
 
@@ -8434,6 +8639,427 @@ def record_smart_history(
     return True
 
 
+def record_power_energy_sample(
+    stable_id,
+    device,
+    watts,
+    mode,
+    source,
+    recorded_epoch=None
+):
+
+    if not stable_id:
+        return False
+
+    try:
+        watts = float(
+            watts
+        )
+    except Exception:
+        return False
+
+    if (
+        not watts >= 0
+        or watts != watts
+    ):
+        return False
+
+    now_epoch = float(
+        recorded_epoch
+        if recorded_epoch is not None
+        else time.time()
+    )
+
+    previous = power_energy_last_sample.get(
+        stable_id
+    )
+
+    interval_seconds = 0.0
+    energy_wh = 0.0
+
+    if isinstance(
+        previous,
+        dict
+    ):
+
+        try:
+            previous_epoch = float(
+                previous.get(
+                    "epoch"
+                )
+            )
+            previous_watts = float(
+                previous.get(
+                    "watts"
+                )
+            )
+
+            interval_seconds = (
+                now_epoch
+                - previous_epoch
+            )
+
+            if (
+                interval_seconds > 0
+                and interval_seconds
+                <= POWER_ENERGY_MAX_INTERVAL_SECONDS
+            ):
+
+                average_watts = (
+                    previous_watts
+                    + watts
+                ) / 2.0
+
+                energy_wh = (
+                    average_watts
+                    * interval_seconds
+                    / 3600.0
+                )
+
+            else:
+                interval_seconds = 0.0
+
+        except Exception:
+            interval_seconds = 0.0
+            energy_wh = 0.0
+
+    power_energy_last_sample[
+        stable_id
+    ] = {
+        "epoch": now_epoch,
+        "watts": watts
+    }
+
+    bucket_start = int(
+        now_epoch
+        // POWER_ENERGY_BUCKET_SECONDS
+        * POWER_ENERGY_BUCKET_SECONDS
+    )
+
+    updated_at = datetime.fromtimestamp(
+        now_epoch,
+        timezone.utc
+    ).isoformat()
+
+    with smart_history_connect() as connection:
+
+        connection.execute(
+            """
+            INSERT INTO power_energy_history (
+                stable_id,
+                device,
+                bucket_start,
+                energy_wh,
+                sample_seconds,
+                last_watts,
+                last_mode,
+                source,
+                updated_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ON CONFLICT (
+                stable_id,
+                bucket_start
+            )
+            DO UPDATE SET
+                device = excluded.device,
+                energy_wh = (
+                    power_energy_history.energy_wh
+                    + excluded.energy_wh
+                ),
+                sample_seconds = (
+                    power_energy_history.sample_seconds
+                    + excluded.sample_seconds
+                ),
+                last_watts = excluded.last_watts,
+                last_mode = excluded.last_mode,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                stable_id,
+                device,
+                bucket_start,
+                round(
+                    energy_wh,
+                    8
+                ),
+                round(
+                    interval_seconds,
+                    3
+                ),
+                round(
+                    watts,
+                    6
+                ),
+                str(
+                    mode
+                    or ""
+                ),
+                str(
+                    source
+                    or ""
+                ),
+                updated_at
+            )
+        )
+
+        connection.commit()
+
+    return True
+
+
+def get_power_energy_summary(
+    stable_id,
+    range_name
+):
+
+    range_seconds = (
+        get_smart_history_range_seconds(
+            range_name
+        )
+    )
+
+    now_epoch = time.time()
+    cutoff_epoch = (
+        now_epoch
+        - range_seconds
+    )
+
+    bucket_cutoff = int(
+        cutoff_epoch
+        // POWER_ENERGY_BUCKET_SECONDS
+        * POWER_ENERGY_BUCKET_SECONDS
+    )
+
+    with smart_history_connect() as connection:
+
+        row = connection.execute(
+            """
+            SELECT
+                COUNT(*) AS bucket_count,
+                COALESCE(
+                    SUM(energy_wh),
+                    0
+                ) AS energy_wh,
+                COALESCE(
+                    SUM(sample_seconds),
+                    0
+                ) AS sample_seconds,
+                MIN(bucket_start) AS first_bucket,
+                MAX(bucket_start) AS last_bucket
+            FROM power_energy_history
+            WHERE
+                stable_id = ?
+                AND bucket_start >= ?
+            """,
+            (
+                stable_id,
+                bucket_cutoff
+            )
+        ).fetchone()
+
+        first_ever = connection.execute(
+            """
+            SELECT
+                MIN(bucket_start)
+            FROM power_energy_history
+            WHERE stable_id = ?
+            """,
+            (
+                stable_id,
+            )
+        ).fetchone()
+
+    bucket_count = int(
+        row["bucket_count"]
+        or 0
+    )
+
+    energy_wh = float(
+        row["energy_wh"]
+        or 0
+    )
+
+    sample_seconds = float(
+        row["sample_seconds"]
+        or 0
+    )
+
+    first_bucket = (
+        row["first_bucket"]
+        if row["first_bucket"]
+        is not None
+        else None
+    )
+
+    first_ever_epoch = (
+        first_ever[0]
+        if (
+            first_ever
+            and first_ever[0]
+            is not None
+        )
+        else None
+    )
+
+    recording_started_at = (
+        datetime.fromtimestamp(
+            float(
+                first_ever_epoch
+            ),
+            timezone.utc
+        ).isoformat()
+        if first_ever_epoch
+        is not None
+        else None
+    )
+
+    return {
+        "available": (
+            bucket_count > 0
+        ),
+        "estimated": True,
+        "electrically_measured": False,
+        "range": range_name,
+        "energy_wh": round(
+            energy_wh,
+            4
+        ),
+        "energy_kwh": round(
+            energy_wh / 1000.0,
+            6
+        ),
+        "covered_seconds": round(
+            sample_seconds,
+            1
+        ),
+        "bucket_seconds":
+            POWER_ENERGY_BUCKET_SECONDS,
+        "bucket_count": bucket_count,
+        "first_bucket": first_bucket,
+        "last_bucket": (
+            row["last_bucket"]
+            if row["last_bucket"]
+            is not None
+            else None
+        ),
+        "recording_started_at":
+            recording_started_at
+    }
+
+
+async def monitor_power_energy_history():
+
+    # Let the one-second disk activity monitor establish its first counters.
+    await asyncio.sleep(
+        5
+    )
+
+    while True:
+
+        current_stable_ids = set()
+
+        try:
+
+            disks = await asyncio.to_thread(
+                get_disks
+            )
+
+            now_epoch = time.time()
+
+            for disk in disks:
+
+                if not isinstance(
+                    disk,
+                    dict
+                ):
+                    continue
+
+                stable_id = disk.get(
+                    "stable_id"
+                )
+
+                if not stable_id:
+                    continue
+
+                current_stable_ids.add(
+                    stable_id
+                )
+
+                estimate = disk.get(
+                    "power_estimate"
+                )
+
+                if (
+                    not isinstance(
+                        estimate,
+                        dict
+                    )
+                    or not estimate.get(
+                        "available"
+                    )
+                ):
+
+                    power_energy_last_sample.pop(
+                        stable_id,
+                        None
+                    )
+                    continue
+
+                watts = estimate.get(
+                    "watts"
+                )
+
+                try:
+                    numeric_watts = float(
+                        watts
+                    )
+                except Exception:
+                    power_energy_last_sample.pop(
+                        stable_id,
+                        None
+                    )
+                    continue
+
+                record_power_energy_sample(
+                    stable_id,
+                    str(
+                        disk.get(
+                            "device"
+                        )
+                        or ""
+                    ),
+                    numeric_watts,
+                    estimate.get(
+                        "mode"
+                    ),
+                    estimate.get(
+                        "source"
+                    ),
+                    recorded_epoch=now_epoch
+                )
+
+        except Exception:
+            pass
+
+        for stable_id in list(
+            power_energy_last_sample.keys()
+        ):
+
+            if stable_id not in current_stable_ids:
+
+                power_energy_last_sample.pop(
+                    stable_id,
+                    None
+                )
+
+        await asyncio.sleep(
+            POWER_ENERGY_SAMPLE_SECONDS
+        )
+
+
 def prune_smart_history():
 
     cutoff = datetime.fromtimestamp(
@@ -8453,6 +9079,24 @@ def prune_smart_history():
             WHERE recorded_at < ?
             """,
             (cutoff,)
+        )
+
+        power_cutoff = int(
+            time.time()
+            - SMART_HISTORY_RETENTION_DAYS
+            * 24
+            * 60
+            * 60
+        )
+
+        connection.execute(
+            """
+            DELETE FROM power_energy_history
+            WHERE bucket_start < ?
+            """,
+            (
+                power_cutoff,
+            )
         )
 
         connection.commit()
@@ -8608,7 +9252,12 @@ def get_smart_history(
             SMART_HISTORY_SAFE_INTERVAL_SECONDS,
         "sample_count": len(samples),
         "available_metrics": available_metrics,
-        "samples": samples
+        "samples": samples,
+        "power_energy":
+            get_power_energy_summary(
+                stable_id,
+                range_name
+            )
     }
 
 
@@ -8827,6 +9476,1019 @@ def get_smart_data(
 
 
 # -------------------------------------------------
+# LIVE POWER ESTIMATE
+# -------------------------------------------------
+
+def _read_power_profiles_file(
+    path
+):
+
+    try:
+
+        data = json.loads(
+            path.read_text(
+                encoding="utf-8"
+            )
+        )
+
+        profiles = data.get(
+            "profiles",
+            []
+        )
+
+        if not isinstance(
+            profiles,
+            list
+        ):
+            return []
+
+        return [
+            profile
+            for profile in profiles
+            if isinstance(
+                profile,
+                dict
+            )
+        ]
+
+    except Exception:
+        return []
+
+
+def _write_remote_power_profiles(
+    raw_text
+):
+
+    POWER_PROFILES_REMOTE_CACHE_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    temp_file = (
+        POWER_PROFILES_REMOTE_CACHE_FILE
+        .with_suffix(
+            ".tmp"
+        )
+    )
+
+    temp_file.write_text(
+        raw_text,
+        encoding="utf-8"
+    )
+
+    temp_file.replace(
+        POWER_PROFILES_REMOTE_CACHE_FILE
+    )
+
+
+def load_power_profiles():
+
+    global POWER_PROFILES_CACHE
+    global POWER_PROFILES_SOURCE
+
+    with POWER_PROFILES_LOCK:
+
+        if isinstance(
+            POWER_PROFILES_CACHE,
+            list
+        ):
+            return POWER_PROFILES_CACHE
+
+        remote_profiles = (
+            _read_power_profiles_file(
+                POWER_PROFILES_REMOTE_CACHE_FILE
+            )
+        )
+
+        if remote_profiles:
+
+            POWER_PROFILES_CACHE = (
+                remote_profiles
+            )
+            POWER_PROFILES_SOURCE = (
+                "remote-cache"
+            )
+
+            return POWER_PROFILES_CACHE
+
+        bundled_profiles = (
+            _read_power_profiles_file(
+                POWER_PROFILES_FILE
+            )
+        )
+
+        POWER_PROFILES_CACHE = (
+            bundled_profiles
+        )
+        POWER_PROFILES_SOURCE = "bundled"
+
+        return POWER_PROFILES_CACHE
+
+
+def refresh_power_profiles_from_remote():
+
+    global POWER_PROFILES_CACHE
+    global POWER_PROFILES_SOURCE
+    global POWER_PROFILES_LAST_REMOTE_CHECK
+    global POWER_PROFILES_LAST_REMOTE_UPDATE
+    global POWER_PROFILES_LAST_REMOTE_ERROR
+
+    POWER_PROFILES_LAST_REMOTE_CHECK = (
+        datetime.now(
+            timezone.utc
+        ).isoformat()
+    )
+
+    if not POWER_PROFILES_REMOTE_URL:
+
+        POWER_PROFILES_LAST_REMOTE_ERROR = (
+            "remote-url-disabled"
+        )
+        return False
+
+    try:
+
+        request = UrlRequest(
+            POWER_PROFILES_REMOTE_URL,
+            headers={
+                "User-Agent":
+                    "Disk-Monitor-power-profile-updater",
+                "Accept":
+                    "application/json"
+            }
+        )
+
+        with urlopen(
+            request,
+            timeout=
+                POWER_PROFILES_REMOTE_TIMEOUT_SECONDS
+        ) as response:
+
+            raw_bytes = response.read(
+                2 * 1024 * 1024
+            )
+
+        raw_text = raw_bytes.decode(
+            "utf-8"
+        )
+
+        data = json.loads(
+            raw_text
+        )
+
+        profiles = data.get(
+            "profiles",
+            []
+        )
+
+        if (
+            not isinstance(
+                profiles,
+                list
+            )
+            or not profiles
+        ):
+            raise ValueError(
+                "remote profile catalog has no profiles"
+            )
+
+        validated_profiles = [
+            profile
+            for profile in profiles
+            if isinstance(
+                profile,
+                dict
+            )
+        ]
+
+        if not validated_profiles:
+            raise ValueError(
+                "remote profile catalog has no valid profiles"
+            )
+
+        _write_remote_power_profiles(
+            raw_text
+        )
+
+        with POWER_PROFILES_LOCK:
+
+            POWER_PROFILES_CACHE = (
+                validated_profiles
+            )
+            POWER_PROFILES_SOURCE = "remote"
+
+        POWER_PROFILES_LAST_REMOTE_UPDATE = (
+            datetime.now(
+                timezone.utc
+            ).isoformat()
+        )
+        POWER_PROFILES_LAST_REMOTE_ERROR = None
+
+        return True
+
+    except Exception as error:
+
+        POWER_PROFILES_LAST_REMOTE_ERROR = (
+            str(
+                error
+            )[:300]
+        )
+
+        return False
+
+
+def power_profiles_refresh_worker():
+
+    while True:
+
+        try:
+            refresh_power_profiles_from_remote()
+        except Exception:
+            pass
+
+        time.sleep(
+            POWER_PROFILES_REFRESH_SECONDS
+        )
+
+
+threading.Thread(
+    target=power_profiles_refresh_worker,
+    daemon=True,
+    name="power-profile-refresh"
+).start()
+
+
+def normalize_power_model(
+    model
+):
+
+    return re.sub(
+        r"\s+",
+        " ",
+        str(
+            model
+            or ""
+        ).strip().upper()
+    )
+
+
+def match_power_profile(
+    model,
+    disk_type,
+    transport=None,
+    size_bytes=None
+):
+
+    normalized = normalize_power_model(
+        model
+    )
+
+    if not normalized:
+        return None
+
+    try:
+        size_tb = (
+            float(
+                size_bytes
+            )
+            / 1000**4
+            if size_bytes
+            else None
+        )
+    except Exception:
+        size_tb = None
+
+    for profile in load_power_profiles():
+
+        if not isinstance(
+            profile,
+            dict
+        ):
+            continue
+
+        expected_type = str(
+            profile.get(
+                "device_type"
+            )
+            or ""
+        ).upper()
+
+        if (
+            expected_type
+            and expected_type
+            != str(
+                disk_type
+                or ""
+            ).upper()
+        ):
+            continue
+
+        expected_transport = str(
+            profile.get(
+                "transport"
+            )
+            or ""
+        ).lower()
+
+        if (
+            expected_transport
+            and expected_transport
+            != str(
+                transport
+                or ""
+            ).lower()
+        ):
+            continue
+
+        if size_tb is not None:
+
+            try:
+                minimum = profile.get(
+                    "size_tb_min"
+                )
+                maximum = profile.get(
+                    "size_tb_max"
+                )
+
+                if (
+                    minimum is not None
+                    and size_tb < float(
+                        minimum
+                    )
+                ):
+                    continue
+
+                if (
+                    maximum is not None
+                    and size_tb > float(
+                        maximum
+                    )
+                ):
+                    continue
+
+            except Exception:
+                continue
+
+        prefixes = profile.get(
+            "model_prefixes",
+            []
+        )
+
+        if not isinstance(
+            prefixes,
+            list
+        ):
+            continue
+
+        for prefix in prefixes:
+
+            candidate = normalize_power_model(
+                prefix
+            )
+
+            if (
+                candidate
+                and normalized.startswith(
+                    candidate
+                )
+            ):
+                return profile
+
+    return None
+
+
+def get_nvme_controller_path(
+    device
+):
+
+    match = re.match(
+        r"^(nvme\d+)n\d+(?:p\d+)?$",
+        str(
+            device
+            or ""
+        )
+    )
+
+    if not match:
+        return None
+
+    return (
+        "/dev/"
+        + match.group(1)
+    )
+
+
+def get_nvme_power_profile(
+    device
+):
+
+    controller = get_nvme_controller_path(
+        device
+    )
+
+    if not controller:
+        return None
+
+    with NVME_POWER_PROFILE_LOCK:
+
+        cached = NVME_POWER_PROFILE_CACHE.get(
+            controller
+        )
+
+        if isinstance(
+            cached,
+            dict
+        ):
+            return cached
+
+        identify = run_command(
+            [
+                "nvme",
+                "id-ctrl",
+                controller,
+                "-H"
+            ],
+            timeout=8
+        )
+
+        if identify.get(
+            "returncode"
+        ) != 0:
+
+            NVME_POWER_PROFILE_CACHE[
+                controller
+            ] = {
+                "available": False
+            }
+
+            return NVME_POWER_PROFILE_CACHE[
+                controller
+            ]
+
+        states = []
+
+        for line in (
+            identify.get(
+                "output"
+            )
+            or ""
+        ).splitlines():
+
+            match = re.match(
+                r"^ps\s+(\d+)\s*:\s*"
+                r"mp:([0-9.]+)(m?W)\s+"
+                r"(non-operational|operational)\b",
+                line.strip(),
+                re.IGNORECASE
+            )
+
+            if not match:
+                continue
+
+            try:
+                watts = float(
+                    match.group(2)
+                )
+            except Exception:
+                continue
+
+            if (
+                match.group(3).lower()
+                == "mw"
+            ):
+                watts /= 1000.0
+
+            states.append(
+                {
+                    "ps": int(
+                        match.group(1)
+                    ),
+                    "max_w": watts,
+                    "operational": (
+                        match.group(4).lower()
+                        == "operational"
+                    )
+                }
+            )
+
+        apst = run_command(
+            [
+                "nvme",
+                "get-feature",
+                controller,
+                "-f",
+                "0x0c",
+                "-H"
+            ],
+            timeout=8
+        )
+
+        apst_output = (
+            apst.get(
+                "output"
+            )
+            or ""
+        )
+
+        apst_enabled = (
+            "APSTE): Enabled"
+            in apst_output
+        )
+
+        targets = []
+
+        for value in re.findall(
+            r"Idle Transition Power State"
+            r"\s+\(ITPS\):\s*(\d+)",
+            apst_output,
+            re.IGNORECASE
+        ):
+
+            try:
+                targets.append(
+                    int(
+                        value
+                    )
+                )
+            except Exception:
+                pass
+
+        deepest_target = (
+            max(
+                targets
+            )
+            if targets
+            else None
+        )
+
+        result = {
+            "available": bool(
+                states
+            ),
+            "controller": controller,
+            "states": states,
+            "apst_enabled": apst_enabled,
+            "deepest_apst_ps":
+                deepest_target
+        }
+
+        NVME_POWER_PROFILE_CACHE[
+            controller
+        ] = result
+
+        return result
+
+
+def power_estimate_unavailable():
+
+    return {
+        "available": False,
+        "watts": None,
+        "qualifier": "",
+        "mode": "unavailable",
+        "source": "unavailable",
+        "estimated": True
+    }
+
+
+def get_nvme_power_estimate(
+    device,
+    activity
+):
+
+    profile = get_nvme_power_profile(
+        device
+    )
+
+    if (
+        not isinstance(
+            profile,
+            dict
+        )
+        or not profile.get(
+            "available"
+        )
+    ):
+        return power_estimate_unavailable()
+
+    states = profile.get(
+        "states",
+        []
+    )
+
+    activity_status = str(
+        (
+            activity
+            or {}
+        ).get(
+            "status"
+        )
+        or ""
+    ).upper()
+
+    selected = None
+    mode = "idle"
+
+    if activity_status == "ACTIVE":
+
+        operational = [
+            item
+            for item in states
+            if item.get(
+                "operational"
+            )
+        ]
+
+        if operational:
+            selected = max(
+                operational,
+                key=lambda item:
+                    float(
+                        item.get(
+                            "max_w",
+                            0
+                        )
+                    )
+            )
+            mode = "active"
+
+    elif profile.get(
+        "apst_enabled"
+    ):
+
+        target = profile.get(
+            "deepest_apst_ps"
+        )
+
+        if target is not None:
+            selected = next(
+                (
+                    item
+                    for item in states
+                    if item.get(
+                        "ps"
+                    )
+                    == target
+                ),
+                None
+            )
+
+        if selected is None:
+
+            non_operational = [
+                item
+                for item in states
+                if not item.get(
+                    "operational"
+                )
+            ]
+
+            if non_operational:
+                selected = min(
+                    non_operational,
+                    key=lambda item:
+                        float(
+                            item.get(
+                                "max_w",
+                                0
+                            )
+                        )
+                )
+
+    if selected is None:
+        return power_estimate_unavailable()
+
+    return {
+        "available": True,
+        "watts": round(
+            float(
+                selected.get(
+                    "max_w",
+                    0
+                )
+            ),
+            4
+        ),
+        "qualifier": "≤",
+        "mode": mode,
+        "source": "nvme-controller",
+        "estimated": True,
+        "power_state": (
+            "PS"
+            + str(
+                selected.get(
+                    "ps"
+                )
+            )
+        ),
+        "apst_enabled": bool(
+            profile.get(
+                "apst_enabled"
+            )
+        )
+    }
+
+
+def get_profile_power_estimate(
+    profile,
+    activity,
+    power_state,
+    disk_type
+):
+
+    if not isinstance(
+        profile,
+        dict
+    ):
+        return power_estimate_unavailable()
+
+    watts_map = profile.get(
+        "watts",
+        {}
+    )
+
+    if not isinstance(
+        watts_map,
+        dict
+    ):
+        return power_estimate_unavailable()
+
+    status = str(
+        (
+            power_state
+            or {}
+        ).get(
+            "status"
+        )
+        or ""
+    ).upper()
+
+    activity = (
+        activity
+        if isinstance(
+            activity,
+            dict
+        )
+        else {}
+    )
+
+    activity_status = str(
+        activity.get(
+            "status"
+        )
+        or ""
+    ).upper()
+
+    try:
+        read_bps = float(
+            activity.get(
+                "read_bytes_per_sec",
+                0
+            )
+            or 0
+        )
+        write_bps = float(
+            activity.get(
+                "write_bytes_per_sec",
+                0
+            )
+            or 0
+        )
+    except Exception:
+        read_bps = 0.0
+        write_bps = 0.0
+
+    value = None
+    mode = "idle"
+
+    if status in {
+        "STANDBY",
+        "STANDBY_ESTIMATED"
+    }:
+
+        if str(
+            disk_type
+            or ""
+        ).upper() == "SSD":
+
+            value = watts_map.get(
+                "sleep"
+            )
+
+        if value is None:
+            value = watts_map.get(
+                "standby"
+            )
+
+        mode = "standby"
+
+    elif (
+        activity_status == "ACTIVE"
+        or read_bps > 0
+        or write_bps > 0
+    ):
+
+        read_w = watts_map.get(
+            "read"
+        )
+        write_w = watts_map.get(
+            "write"
+        )
+
+        if (
+            read_w is not None
+            and write_w is not None
+            and (
+                read_bps > 0
+                or write_bps > 0
+            )
+        ):
+
+            total_bps = (
+                read_bps
+                + write_bps
+            )
+
+            if total_bps > 0:
+
+                value = (
+                    float(
+                        read_w
+                    )
+                    * read_bps
+                    + float(
+                        write_w
+                    )
+                    * write_bps
+                ) / total_bps
+
+        if value is None:
+            value = watts_map.get(
+                "active"
+            )
+
+        mode = "active"
+
+    else:
+
+        value = watts_map.get(
+            "idle"
+        )
+
+        mode = "idle"
+
+    if value is None:
+        return power_estimate_unavailable()
+
+    source = profile.get(
+        "source",
+        {}
+    )
+
+    source_kind = (
+        str(
+            source.get(
+                "kind"
+            )
+            or ""
+        )
+        if isinstance(
+            source,
+            dict
+        )
+        else ""
+    )
+
+    power_states = profile.get(
+        "power_states",
+        {}
+    )
+
+    if not isinstance(
+        power_states,
+        dict
+    ):
+        power_states = {}
+
+    power_state_label = (
+        power_states.get(
+            mode
+        )
+        or power_states.get(
+            "idle"
+            if mode == "standby"
+            else mode
+        )
+    )
+
+    qualifier = str(
+        profile.get(
+            "qualifier"
+        )
+        or (
+            "≤"
+            if source_kind
+            == "nvme-controller-profile"
+            else "≈"
+        )
+    )
+
+    return {
+        "available": True,
+        "watts": round(
+            float(
+                value
+            ),
+            4
+        ),
+        "qualifier": qualifier,
+        "mode": mode,
+        "source": (
+            "nvme-controller-profile"
+            if source_kind
+            == "nvme-controller-profile"
+            else (
+                "family-estimate"
+                if source_kind
+                == "family-estimate"
+                else (
+                    "manufacturer-plus-family-estimate"
+                    if source_kind
+                    == "manufacturer-plus-family-estimate"
+                    else "manufacturer-datasheet"
+                )
+            )
+        ),
+        "estimated": True,
+        "power_state": power_state_label,
+        "profile_id": profile.get(
+            "id"
+        ),
+        "source_label": (
+            source.get(
+                "label"
+            )
+            if isinstance(
+                source,
+                dict
+            )
+            else None
+        )
+    }
+
+
+def get_power_estimate(
+    device,
+    model,
+    disk_type,
+    transport,
+    activity,
+    power_state,
+    size_bytes=None
+):
+
+    is_nvme = (
+        str(
+            transport
+            or ""
+        ).lower()
+        == "nvme"
+        or str(
+            device
+            or ""
+        ).startswith(
+            "nvme"
+        )
+    )
+
+    if is_nvme:
+
+        live_profile = get_nvme_power_estimate(
+            device,
+            activity
+        )
+
+        if live_profile.get(
+            "available"
+        ):
+            return live_profile
+
+    profile = match_power_profile(
+        model,
+        disk_type,
+        transport=transport,
+        size_bytes=size_bytes
+    )
+
+    return get_profile_power_estimate(
+        profile,
+        activity,
+        power_state,
+        disk_type
+    )
+
+
+# -------------------------------------------------
 # DISK LIST
 # -------------------------------------------------
 
@@ -8996,6 +10658,16 @@ def get_disks():
             1
         )
 
+        power_estimate = get_power_estimate(
+            device,
+            model,
+            disk_type,
+            transport,
+            activity_payload,
+            power_state,
+            size_bytes=size_bytes
+        )
+
         disks.append(
             {
                 "device": device,
@@ -9010,6 +10682,14 @@ def get_disks():
 
                 "usb_standby_config":
                     usb_standby_config,
+
+                "usb_link": (
+                    get_usb_link_info(
+                        device_path
+                    )
+                    if transport == "usb"
+                    else None
+                ),
 
                 "model": model,
 
@@ -9082,6 +10762,9 @@ def get_disks():
                     ),
 
                 "power_state": power_state,
+
+                "power_estimate":
+                    power_estimate,
 
                 "smart": smart
             }
@@ -11090,6 +12773,8 @@ def status(
         "usb_hdd_estimated_standby": True,
         "usb_hdd_per_drive_timer_config": True,
         "usb_hdd_no_hdparm_fallback": True,
+        "usb_link_descriptor_info": True,
+        "usb_link_descriptor_live_measurement": False,
         "storage_usage_cached": True,
         "storage_usage_refresh_seconds":
             STORAGE_USAGE_REFRESH_SECONDS,
@@ -11105,6 +12790,11 @@ def status(
             SMART_HISTORY_SAFE_INTERVAL_SECONDS,
         "smart_history_automatic_hdd_reads": False,
         "smart_history_usb_partial_smart_values": True,
+        "power_energy_history": True,
+        "power_energy_history_estimated": True,
+        "power_energy_history_electrically_measured": False,
+        "power_energy_sample_seconds":
+            POWER_ENERGY_SAMPLE_SECONDS,
         "manual_smart_read_uses_smart_as_authority": True,
         "manual_smart_wake_verification_is_nonblocking": True,
         "manual_smart_state_overrides_stale_standby": True,
@@ -11124,6 +12814,23 @@ def status(
         "storage_usage_identity":
             "host-mountinfo-major-minor",
         "raid_display_metadata": True,
+        "live_power_estimate": True,
+        "live_power_electrically_measured": False,
+        "power_profile_database": True,
+        "power_profile_online_catalog": True,
+        "power_profile_catalog_source":
+            POWER_PROFILES_SOURCE,
+        "power_profile_catalog_url":
+            POWER_PROFILES_REMOTE_URL,
+        "power_profile_last_remote_check":
+            POWER_PROFILES_LAST_REMOTE_CHECK,
+        "power_profile_last_remote_update":
+            POWER_PROFILES_LAST_REMOTE_UPDATE,
+        "power_profile_last_remote_error":
+            POWER_PROFILES_LAST_REMOTE_ERROR,
+        "power_profile_refresh_seconds":
+            POWER_PROFILES_REFRESH_SECONDS,
+        "nvme_controller_power_profiles": True,
         "service_runtime":
             get_service_runtime(),
         "zimaos_standby_api": True,

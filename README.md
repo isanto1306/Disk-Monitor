@@ -6,12 +6,12 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 
 ## Current development versions
 
-- Backend: `0.22.42`
-- Frontend: `0.32.104`
+- Backend: `0.22.43`
+- Frontend: `0.32.105`
 
 ## Docker image
 
-The current image is published automatically to GitHub Container Registry:
+The current stable image is published automatically to GitHub Container Registry:
 
 ```text
 ghcr.io/isanto1306/disk-monitor:latest
@@ -22,6 +22,9 @@ ghcr.io/isanto1306/disk-monitor:latest
 - Physical disk discovery for HDD, SSD, NVMe and supported USB storage
 - Capacity with used/free overview, mount points and current disk activity
 - Power-state / standby monitoring
+- Beta live power estimate on drive cards: manufacturer-profile estimates for supported SATA HDD/SSD models and controller-reported NVMe power-state limits; values are explicitly estimates/limits, not electrical measurements
+- Online power-profile catalog: Disk Monitor checks a centrally maintained GitHub catalog at startup and every 24 hours, stores a local cache, and continues offline with cached/bundled profiles
+- USB detail view shows negotiated link speed and the USB descriptor Maximum Power value; Maximum Power is explicitly not treated as a live electrical measurement
 - Persistent standby/active-since timestamps after an observed power-state transition
 - SMART health, temperature and detailed SMART attributes
 - SMART history with date, time and value hover details for available metrics

@@ -541,6 +541,128 @@ ROOT_HTML_RUNTIME_PATCH = r"""
 </script>
 """
 
+
+# Beta 15 preview: persistent, clearly labeled affiliate footer plus an
+# optional daily disclosure dialog. No automatic tabs or redirects.
+ROOT_HTML_AFFILIATE_PREVIEW = r"""
+<style id="disk-monitor-ddownload-preview-style">
+#dm-dd-banner{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:9000;max-width:min(92vw,640px);width:max-content;box-sizing:border-box;padding:10px 14px;border-radius:12px;background:#f5f8ff;color:#162d52;border:1px solid #c7d7f1;box-shadow:0 4px 20px #0002;display:flex;align-items:center;gap:12px;font:13px/1.4 system-ui,sans-serif}
+#dm-dd-banner .dm-dd-copy{min-width:0;max-width:400px}
+#dm-dd-banner .dm-dd-label{display:block;font-weight:700;font-size:11px;color:#4c6285}
+#dm-dd-banner a,#dm-dd-modal a{background:#2459c6;color:#fff;text-decoration:none;border-radius:8px;padding:8px 12px;white-space:nowrap;font-weight:600;display:inline-block}
+#dm-dd-banner a:focus-visible,#dm-dd-modal button:focus-visible,#dm-dd-modal a:focus-visible{outline:3px solid #2ca7e8;outline-offset:2px}
+#dm-dd-overlay{position:fixed;inset:0;z-index:9100;background:#0008;display:grid;place-items:center;padding:20px}
+#dm-dd-modal{max-width:450px;width:100%;box-sizing:border-box;background:#fff;color:#1d293a;border-radius:16px;box-shadow:0 18px 50px #0004;padding:24px;font:14px/1.55 system-ui,sans-serif}
+#dm-dd-modal h2{font-size:20px;margin:0 0 12px}
+#dm-dd-modal p{margin:0 0 16px}
+#dm-dd-modal .dm-dd-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+#dm-dd-modal button{padding:9px 13px;border:1px solid #a9b8d0;border-radius:8px;background:transparent;color:inherit;cursor:pointer}
+@media(prefers-color-scheme:dark){#dm-dd-banner{background:#192536;color:#eaf0fa;border-color:#3d516a}#dm-dd-banner .dm-dd-label{color:#b6c7e2}#dm-dd-modal{background:#1b2737;color:#eff3fa}#dm-dd-modal button{border-color:#69809d}}
+@media(max-width:540px){#dm-dd-banner{left:8px;right:8px;bottom:8px;width:auto;max-width:none;transform:none;padding:9px;font-size:12px}#dm-dd-banner a{padding:7px 8px}#dm-dd-modal{padding:18px}}
+</style>
+<script id="disk-monitor-ddownload-preview-script">
+(function(){
+  "use strict";
+  if(window.__diskMonitorDDownloadPreview15)return;
+  window.__diskMonitorDDownloadPreview15=true;
+  const target="https://ddownload.com/ref/GFQp7rf5";
+  const strings={
+    de:{label:"Werbung · Affiliate-Link",banner:"Mit DDownload die Entwicklung unterstützen",open:"DDownload öffnen",title:"Disk Monitor unterstützen",body:"Disk Monitor bleibt kostenlos. Wenn du über diesen DDownload-Partnerlink einen kostenpflichtigen Zugang kaufst, kann der Entwickler eine Provision erhalten.",close:"Schließen"},
+    en:{label:"Ad · Affiliate link",banner:"Support development with DDownload",open:"Open DDownload",title:"Support Disk Monitor",body:"Disk Monitor remains free. If you buy a paid subscription using this DDownload affiliate link, the developer may receive a commission.",close:"Close"},
+    fr:{label:"Publicité · Lien affilié",banner:"Soutenir le développement via DDownload",open:"Ouvrir DDownload",title:"Soutenir Disk Monitor",body:"Disk Monitor reste gratuit. Un achat payant via ce lien d'affiliation DDownload peut rapporter une commission au développeur.",close:"Fermer"},
+    pt:{label:"Publicidade · Link de afiliado",banner:"Apoiar o desenvolvimento via DDownload",open:"Abrir DDownload",title:"Apoiar o Disk Monitor",body:"O Disk Monitor continua gratuito. Uma compra através desta ligação de afiliado DDownload pode gerar uma comissão para o programador.",close:"Fechar"},
+    es:{label:"Publicidad · Enlace de afiliado",banner:"Apoya el desarrollo con DDownload",open:"Abrir DDownload",title:"Apoya Disk Monitor",body:"Disk Monitor sigue siendo gratuito. Una compra mediante este enlace de afiliado de DDownload puede generar una comisión para el desarrollador.",close:"Cerrar"}
+  };
+  function language(){
+    const codes=[
+      (typeof state!=="undefined"&&state&&state.language)||"",
+      document.documentElement.lang,
+      navigator.language
+    ];
+    for(const code of codes){const key=String(code||"").slice(0,2).toLowerCase();if(strings[key])return key;}
+    return "en";
+  }
+  function node(tag,cls,text){
+    const el=document.createElement(tag);
+    if(cls)el.className=cls;
+    if(text!==undefined)el.textContent=text;
+    return el;
+  }
+  function link(t){
+    const a=node("a","",t.open);a.href=target;a.target="_blank";a.rel="noopener noreferrer sponsored";return a;
+  }
+  function show(){
+    if(!document.body||document.getElementById("dm-dd-banner"))return;
+    const t=strings[language()];
+    const banner=node("aside","");banner.id="dm-dd-banner";banner.setAttribute("aria-label",t.label);
+    const copy=node("div","dm-dd-copy");
+    copy.append(node("span","dm-dd-label",t.label),node("span","",t.banner));
+    banner.append(copy,link(t));document.body.append(banner);
+    // Track the app's actual language, not the browser's original locale.
+    // Disk Monitor updates state.language without necessarily reloading.
+    let renderedLanguage=language();
+    const syncLanguage=()=>{
+      const next=language();
+      if(next===renderedLanguage)return;
+      renderedLanguage=next;
+      const translated=strings[next];
+      banner.setAttribute("aria-label",translated.label);
+      const label=copy.querySelector(".dm-dd-label");
+      if(label)label.textContent=translated.label;
+      const message=copy.querySelector("span:not(.dm-dd-label)");
+      if(message)message.textContent=translated.banner;
+      const bannerLink=banner.querySelector("a");
+      if(bannerLink)bannerLink.textContent=translated.open;
+      const modal=document.getElementById("dm-dd-modal");
+      if(modal){
+        const heading=modal.querySelector("h2");
+        const paragraph=modal.querySelector("p");
+        const modalLink=modal.querySelector("a");
+        const close=modal.querySelector("button");
+        if(heading)heading.textContent=translated.title;
+        if(paragraph)paragraph.textContent=translated.body;
+        if(modalLink)modalLink.textContent=translated.open;
+        if(close)close.textContent=translated.close;
+      }
+    };
+    // Update immediately when the dashboard changes language.
+    // Also cover apps that update the root lang attribute asynchronously.
+    const scheduleLanguageSync=()=>{syncLanguage();};
+    document.addEventListener("change",scheduleLanguageSync,true);
+    document.addEventListener("click",scheduleLanguageSync,true);
+    document.addEventListener("disk-monitor-language-changed",scheduleLanguageSync);
+    const languageObserver=new MutationObserver(scheduleLanguageSync);
+    languageObserver.observe(document.documentElement,{
+      attributes:true,attributeFilter:["lang"]
+    });
+    // Fallback for language switches that only update state.language.
+    window.setInterval(syncLanguage,200);
+    const key="disk-monitor-ddownload-daily-notice-v1";
+    let last=0;
+    try{last=Number(localStorage.getItem(key)||0)}catch(_){}
+    if(last>0&&Date.now()-last<86400000)return;
+    const overlay=node("div","");overlay.id="dm-dd-overlay";
+    const modal=node("section","");modal.id="dm-dd-modal";modal.setAttribute("role","dialog");modal.setAttribute("aria-modal","true");modal.setAttribute("aria-labelledby","dm-dd-title");
+    const heading=node("h2","",t.title);heading.id="dm-dd-title";
+    const actions=node("div","dm-dd-actions");
+    const close=node("button","",t.close);close.type="button";
+    const dismiss=()=>{overlay.remove();};
+    close.addEventListener("click",dismiss);
+    overlay.addEventListener("click",e=>{if(e.target===overlay)dismiss();});
+    const onKey=e=>{if(e.key==="Escape"){dismiss();document.removeEventListener("keydown",onKey);}};
+    document.addEventListener("keydown",onKey);
+    actions.append(link(t),close);
+    modal.append(heading,node("p","",t.body),actions);
+    overlay.append(modal);
+    document.body.append(overlay);
+    try{localStorage.setItem(key,String(Date.now()))}catch(_){}
+    close.focus();
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",show,{once:true});else show();
+})();
+</script>
+""".strip()
+
 try:
     _index_html = (
         main.STATIC_DIR / "index.html"
@@ -567,6 +689,13 @@ try:
             "</body>",
             ROOT_HTML_RUNTIME_PATCH
             + "\n</body>",
+            1
+        )
+
+    if "disk-monitor-ddownload-preview-script" not in _index_html:
+        _index_html = _index_html.replace(
+            "</body>",
+            ROOT_HTML_AFFILIATE_PREVIEW + "\n</body>",
             1
         )
 except Exception:
