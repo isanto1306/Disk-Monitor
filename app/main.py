@@ -2430,7 +2430,7 @@ def get_usb_link_info(
         if max_power_raw:
 
             match = re.search(
-                r"([0-9.]+)\\s*mA",
+                r"([0-9.]+)\s*mA",
                 str(
                     max_power_raw
                 ),
