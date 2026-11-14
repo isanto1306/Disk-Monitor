@@ -625,7 +625,18 @@ ROOT_HTML_AFFILIATE_PREVIEW = r"""
         if(close)close.textContent=translated.close;
       }
     };
-    window.setInterval(syncLanguage,300);
+    // Update immediately when the dashboard changes language.
+    // Also cover apps that update the root lang attribute asynchronously.
+    const scheduleLanguageSync=()=>{syncLanguage();};
+    document.addEventListener("change",scheduleLanguageSync,true);
+    document.addEventListener("click",scheduleLanguageSync,true);
+    document.addEventListener("disk-monitor-language-changed",scheduleLanguageSync);
+    const languageObserver=new MutationObserver(scheduleLanguageSync);
+    languageObserver.observe(document.documentElement,{
+      attributes:true,attributeFilter:["lang"]
+    });
+    // Fallback for language switches that only update state.language.
+    window.setInterval(syncLanguage,200);
     const key="disk-monitor-ddownload-daily-notice-v1";
     let last=0;
     try{last=Number(localStorage.getItem(key)||0)}catch(_){}
