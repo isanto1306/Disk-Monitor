@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.6"
-entrypoint.main.app.version = "0.22.43-beta.6"
+app.version = "0.22.43-beta.7"
+entrypoint.main.app.version = "0.22.43-beta.7"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.6"',
+        '"v0.32.105-beta.7"',
         1,
     )
 
@@ -745,7 +745,7 @@ if entrypoint._index_html is not None:
 
 
     live_power_beta_patch = r"""
-<style id="disk-monitor-live-power-beta6-style">
+<style id="disk-monitor-live-power-beta7-style">
 .power-estimate-live {
     display: inline-flex;
     align-items: center;
@@ -766,63 +766,78 @@ if entrypoint._index_html is not None:
 }
 
 /*
- * Beta 6: keep Status / seit-wartet / Watt in fixed columns.
+ * Beta 7: keep Status / seit-wartet / Watt in fixed columns.
  * The Watt slot no longer moves when the time text appears or disappears.
  */
 .disk-card:not(.compact):not(.current-access-expanded)
-.disk-footer > .footer-section:first-child {
-    flex: 1 1 auto;
-    min-width: 0;
+.disk-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: start;
+    column-gap: 20px;
 }
 
 .disk-card:not(.compact):not(.current-access-expanded)
-.disk-footer > .footer-section:last-child {
-    flex: 0 0 auto;
+.disk-footer > .footer-section:first-child {
+    min-width: 0;
 }
 
 .disk-card:not(.compact):not(.current-access-expanded)
 .power-status-row {
-    display: grid;
-    grid-template-columns:
-        max-content
-        minmax(3rem, 1fr)
-        6.9rem;
+    position: relative;
+    display: flex;
     align-items: center;
-    column-gap: 7px;
+    gap: 7px;
     width: 100%;
     min-width: 0;
+    padding-right: 7.4rem;
+    box-sizing: border-box;
     flex-wrap: nowrap;
 }
 
 .disk-card:not(.compact):not(.current-access-expanded)
-.power-status-row > .status-badge {
-    grid-column: 1;
-}
-
-.disk-card:not(.compact):not(.current-access-expanded)
 .power-status-row > .standby-since-time {
-    grid-column: 2;
-    justify-self: end;
     margin-top: 0;
+    margin-left: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .disk-card:not(.compact):not(.current-access-expanded)
 .power-status-row > .power-estimate-live {
-    grid-column: 3;
-    justify-self: end;
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    display: grid;
+    grid-template-columns: 1rem 5.65rem;
+    align-items: center;
+    column-gap: 0.25rem;
+    width: 6.9rem;
+    min-width: 6.9rem;
     margin-left: 0;
 }
 
-/*
- * The USB timer/ETA hint duplicated the state already visible in the status
- * row and changed card geometry. Keep the USB configuration in details, but
- * do not render the extra hint line on disk cards.
- */
-.disk-card .usb-power-hint {
-    display: none !important;
+.disk-card:not(.compact):not(.current-access-expanded)
+.power-status-row > .power-estimate-live > span:first-child {
+    width: 1rem;
+    text-align: left;
 }
+
+.disk-card:not(.compact):not(.current-access-expanded)
+.power-status-row > .power-estimate-live > span:last-child {
+    width: 5.65rem;
+    text-align: left;
+    white-space: nowrap;
+}
+
+/*
+ * Beta 7 restores the native USB timer / ETA hint below the power row.
+ * renderUsbPowerHint() remains the source of the displayed text.
+ */
 </style>
-<script id="disk-monitor-live-power-beta6">
+<script id="disk-monitor-live-power-beta7">
 (() => {
     if (
         typeof renderStandbySince !== "function"
@@ -1182,7 +1197,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-live-power-beta6"
+        "disk-monitor-live-power-beta7"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
@@ -1194,7 +1209,7 @@ if entrypoint._index_html is not None:
 
 
     usb_detail_beta_patch = r"""
-<style id="disk-monitor-usb-detail-beta6-style">
+<style id="disk-monitor-usb-detail-beta7-style">
 .usb-link-detail-row td {
     border-top: 1px solid rgba(67, 87, 107, .28);
 }
@@ -1211,7 +1226,7 @@ if entrypoint._index_html is not None:
     margin-top: 0;
 }
 </style>
-<script id="disk-monitor-usb-detail-beta6">
+<script id="disk-monitor-usb-detail-beta7">
 (() => {
     if (
         typeof renderDiskDetails !== "function"
@@ -1557,7 +1572,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-usb-detail-beta6"
+        "disk-monitor-usb-detail-beta7"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
