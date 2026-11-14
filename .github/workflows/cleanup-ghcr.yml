@@ -1,0 +1,68 @@
+name: Clean Disk Monitor GHCR versions
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Preview before deletion"
+        type: choice
+        options:
+          - preview
+          - delete
+        default: preview
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Review and clean obsolete versions
+        uses: actions/github-script@v7
+        env:
+          CLEAN_MODE: ${{ inputs.mode }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const pkg = {username: owner, package_type: 'container', package_name: 'disk-monitor'};
+            const versions = await github.paginate(
+              github.rest.packages.getAllPackageVersionsForPackageOwnedByUser,
+              {...pkg, per_page: 100}
+            );
+            const tags = v => v.metadata?.container?.tags ?? [];
+            const stable = versions.filter(v => tags(v).includes('latest') && tags(v).includes('0.32.105'));
+            const beta = versions.filter(v => tags(v).includes('beta') && tags(v).includes('0.32.105-beta.15'));
+            if (stable.length !== 1 || beta.length !== 1 || stable[0].id === beta[0].id) {
+              core.setFailed('SAFETY STOP: expected exactly one stable version tagged latest + 0.32.105 and a distinct beta version tagged beta + 0.32.105-beta.15. No versions were deleted.');
+              return;
+            }
+            const protectedIds = new Set([stable[0].id, beta[0].id]);
+            const obsolete = versions.filter(v => !protectedIds.has(v.id));
+            core.info('KEEP stable ID ' + stable[0].id + ': ' + tags(stable[0]).join(', '));
+            core.info('KEEP beta ID ' + beta[0].id + ': ' + tags(beta[0]).join(', '));
+            core.info('Obsolete version entries: ' + obsolete.length);
+            for (const v of obsolete) core.info('Candidate ID ' + v.id + ', tags: ' + tags(v).join(', '));
+            if (process.env.CLEAN_MODE !== 'delete') {
+              core.info('PREVIEW ONLY. Nothing deleted.');
+              return;
+            }
+            // Recent untagged entries may be OCI index children or attestations.
+            // Preserve these until older than 48 hours.
+            const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+            let deleted = 0;
+            for (const v of obsolete) {
+              if (!tags(v).length && Date.parse(v.created_at) > cutoff) {
+                core.info('Preserving recent untagged version ID ' + v.id);
+                continue;
+              }
+              await github.rest.packages.deletePackageVersionForUser({
+                ...pkg, package_version_id: v.id
+              });
+              core.info('Deleted ID ' + v.id);
+              deleted++;
+            }
+            core.info('Deleted ' + deleted + ' entries. Kept 2 tagged releases and recent untagged OCI components.');
