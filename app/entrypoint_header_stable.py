@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.13"
-entrypoint.main.app.version = "0.22.43-beta.13"
+app.version = "0.22.43-beta.15"
+entrypoint.main.app.version = "0.22.43-beta.15"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.14"',
+        '"v0.32.105-beta.15"',
         1,
     )
 
