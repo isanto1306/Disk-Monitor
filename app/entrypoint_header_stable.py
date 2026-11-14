@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.4"
-entrypoint.main.app.version = "0.22.43-beta.4"
+app.version = "0.22.43-beta.5"
+entrypoint.main.app.version = "0.22.43-beta.5"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.4"',
+        '"v0.32.105-beta.5"',
         1,
     )
 
@@ -745,7 +745,7 @@ if entrypoint._index_html is not None:
 
 
     live_power_beta_patch = r"""
-<style id="disk-monitor-live-power-beta4-style">
+<style id="disk-monitor-live-power-beta5-style">
 .power-estimate-live {
     display: inline-flex;
     align-items: center;
@@ -765,7 +765,7 @@ if entrypoint._index_html is not None:
     font-feature-settings: "tnum" 1;
 }
 </style>
-<script id="disk-monitor-live-power-beta4">
+<script id="disk-monitor-live-power-beta5">
 (() => {
     if (
         typeof renderStandbySince !== "function"
@@ -1104,12 +1104,387 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-live-power-beta4"
+        "disk-monitor-live-power-beta5"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
             "</body>",
             live_power_beta_patch
+            + "\n</body>",
+            1,
+        )
+
+
+    usb_detail_beta_patch = r"""
+<style id="disk-monitor-usb-detail-beta5-style">
+.usb-link-detail-row td {
+    border-top: 1px solid rgba(67, 87, 107, .28);
+}
+
+.usb-link-detail-note {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.usb-link-details-table {
+    margin-top: 0;
+}
+</style>
+<script id="disk-monitor-usb-detail-beta5">
+(() => {
+    if (
+        typeof renderDiskDetails !== "function"
+        || typeof escapeHtml !== "function"
+    ) {
+        return;
+    }
+
+    const originalRenderDiskDetailsWithUsb =
+        renderDiskDetails;
+
+    const usbText = key => {
+        const language = (
+            typeof state !== "undefined"
+            && state.language
+                ? state.language
+                : (
+                    document.documentElement.lang
+                    || navigator.language
+                    || "en"
+                )
+        ).toLowerCase();
+
+        const translations = {
+            de: {
+                speed: "USB-Geschwindigkeit",
+                maxPower: "Maximum Power",
+                note: "USB-Descriptor · keine Live-Messung"
+            },
+            en: {
+                speed: "USB speed",
+                maxPower: "Maximum Power",
+                note: "USB descriptor · not a live measurement"
+            },
+            fr: {
+                speed: "Vitesse USB",
+                maxPower: "Puissance maximale",
+                note: "Descripteur USB · pas une mesure en direct"
+            },
+            pt: {
+                speed: "Velocidade USB",
+                maxPower: "Potência máxima",
+                note: "Descritor USB · não é uma medição em direto"
+            },
+            es: {
+                speed: "Velocidad USB",
+                maxPower: "Potencia máxima",
+                note: "Descriptor USB · no es una medición en directo"
+            }
+        };
+
+        const code = language.slice(
+            0,
+            2
+        );
+
+        return (
+            translations[code]
+            || translations.en
+        )[key];
+    };
+
+    const formatUsbSpeed = speedMbps => {
+        const value = Number(
+            speedMbps
+        );
+
+        if (!Number.isFinite(value)) {
+            return "-";
+        }
+
+        if (value >= 1000) {
+            const gbps = value / 1000;
+
+            return (
+                new Intl.NumberFormat(
+                    document.documentElement.lang
+                    || navigator.language
+                    || undefined,
+                    {
+                        maximumFractionDigits: 1
+                    }
+                ).format(gbps)
+                + " Gbit/s"
+            );
+        }
+
+        return (
+            new Intl.NumberFormat(
+                document.documentElement.lang
+                || navigator.language
+                || undefined,
+                {
+                    maximumFractionDigits: 0
+                }
+            ).format(value)
+            + " Mbit/s"
+        );
+    };
+
+    const formatUsbMaximumPower = usb => {
+        const watts = Number(
+            usb.max_power_w
+        );
+
+        const milliamps = Number(
+            usb.max_power_ma
+        );
+
+        if (
+            !Number.isFinite(watts)
+            && !Number.isFinite(milliamps)
+        ) {
+            return "-";
+        }
+
+        const wattsText = Number.isFinite(
+            watts
+        )
+            ? (
+                new Intl.NumberFormat(
+                    document.documentElement.lang
+                    || navigator.language
+                    || undefined,
+                    {
+                        maximumFractionDigits: 3
+                    }
+                ).format(watts)
+                + " W"
+            )
+            : "";
+
+        const currentText = Number.isFinite(
+            milliamps
+        )
+            ? (
+                new Intl.NumberFormat(
+                    document.documentElement.lang
+                    || navigator.language
+                    || undefined,
+                    {
+                        maximumFractionDigits: 0
+                    }
+                ).format(milliamps)
+                + " mA"
+            )
+            : "";
+
+        if (
+            wattsText
+            && currentText
+        ) {
+            return (
+                wattsText
+                + " ("
+                + currentText
+                + ")"
+            );
+        }
+
+        return (
+            wattsText
+            || currentText
+            || "-"
+        );
+    };
+
+    const buildUsbRows = disk => {
+        const usb = (
+            disk
+            && typeof disk === "object"
+            && disk.usb_link
+            && typeof disk.usb_link === "object"
+        )
+            ? disk.usb_link
+            : null;
+
+        if (!usb) {
+            return "";
+        }
+
+        const note = escapeHtml(
+            usbText("note")
+        );
+
+        return `
+            <tr class="usb-link-detail-row">
+                <td>
+                    <div class="smart-attribute-name">
+                        <span class="smart-dot"></span>
+                        <span>
+                            ${escapeHtml(
+                                usbText("speed")
+                            )}
+                        </span>
+                    </div>
+                </td>
+                <td>
+                    ${escapeHtml(
+                        formatUsbSpeed(
+                            usb.speed_mbps
+                        )
+                    )}
+                </td>
+            </tr>
+            <tr class="usb-link-detail-row">
+                <td>
+                    <div class="smart-attribute-name">
+                        <span class="smart-dot"></span>
+                        <span>
+                            ${escapeHtml(
+                                usbText("maxPower")
+                            )}
+                        </span>
+                    </div>
+                </td>
+                <td>
+                    ${escapeHtml(
+                        formatUsbMaximumPower(
+                            usb
+                        )
+                    )}
+                    <span class="usb-link-detail-note">
+                        ${note}
+                    </span>
+                </td>
+            </tr>
+        `;
+    };
+
+    renderDiskDetails = function(
+        disk
+    ) {
+        originalRenderDiskDetailsWithUsb(
+            disk
+        );
+
+        if (
+            !disk
+            || String(
+                disk.transport
+                || ""
+            ).toLowerCase() !== "usb"
+            || !disk.usb_link
+        ) {
+            return;
+        }
+
+        const detailsBody =
+            document.getElementById(
+                "diskDetailsBody"
+            );
+
+        if (!detailsBody) {
+            return;
+        }
+
+        detailsBody
+            .querySelectorAll(
+                ".usb-link-detail-row, .usb-link-details-table"
+            )
+            .forEach(
+                element => element.remove()
+            );
+
+        const rows = buildUsbRows(
+            disk
+        );
+
+        if (!rows) {
+            return;
+        }
+
+        const tbody =
+            detailsBody.querySelector(
+                ".smart-detail-table tbody"
+            );
+
+        if (tbody) {
+            tbody.insertAdjacentHTML(
+                "beforeend",
+                rows
+            );
+
+            return;
+        }
+
+        const smartSection =
+            detailsBody.querySelector(
+                ".detail-smart"
+            );
+
+        if (!smartSection) {
+            return;
+        }
+
+        const table = document.createElement(
+            "table"
+        );
+
+        table.className =
+            "smart-detail-table usb-link-details-table";
+
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th>${escapeHtml(
+                        typeof t === "function"
+                            ? t("attribute")
+                            : "Attribute"
+                    )}</th>
+                    <th>${escapeHtml(
+                        typeof t === "function"
+                            ? t("value")
+                            : "Value"
+                    )}</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows}
+            </tbody>
+        `;
+
+        const lowerControls =
+            smartSection.querySelector(
+                ".detail-lower-controls"
+            );
+
+        if (lowerControls) {
+            smartSection.insertBefore(
+                table,
+                lowerControls
+            );
+        }
+        else {
+            smartSection.appendChild(
+                table
+            );
+        }
+    };
+})();
+</script>
+"""
+
+    if (
+        "disk-monitor-usb-detail-beta5"
+        not in entrypoint._index_html
+    ):
+        entrypoint._index_html = entrypoint._index_html.replace(
+            "</body>",
+            usb_detail_beta_patch
             + "\n</body>",
             1,
         )
