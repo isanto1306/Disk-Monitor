@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 from urllib.request import Request as UrlRequest, urlopen
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -11343,9 +11343,28 @@ def put_hdd_in_standby(
 )
 def root():
 
-    return FileResponse(
-        STATIC_DIR / "index.html"
-    )
+    # Beta 13: small UI-only layout corrections, leaving index.html intact.
+    beta13_css = """
+    <style id="dm-beta13-layout">
+    html:lang(fr) .disk-card:has(.usb-power-hint),
+    html:lang(pt) .disk-card:has(.usb-power-hint),
+    html:lang(es) .disk-card:has(.usb-power-hint) {
+        padding-bottom: 34px;
+    }
+    html:lang(fr) .disk-card.compact:has(.usb-power-hint),
+    html:lang(pt) .disk-card.compact:has(.usb-power-hint),
+    html:lang(es) .disk-card.compact:has(.usb-power-hint) {
+        padding-bottom: 27px;
+    }
+    .disk-card .disk-footer > .footer-section:last-child {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    </style>
+    """
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    return HTMLResponse(html.replace("</head>", beta13_css + "</head>", 1))
 
 
 @app.get(
