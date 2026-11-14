@@ -9920,7 +9920,17 @@ def get_profile_power_estimate(
             "nvme-controller-profile"
             if source_kind
             == "nvme-controller-profile"
-            else "manufacturer-datasheet"
+            else (
+                "family-estimate"
+                if source_kind
+                == "family-estimate"
+                else (
+                    "manufacturer-plus-family-estimate"
+                    if source_kind
+                    == "manufacturer-plus-family-estimate"
+                    else "manufacturer-datasheet"
+                )
+            )
         ),
         "estimated": True,
         "power_state": power_state_label,
