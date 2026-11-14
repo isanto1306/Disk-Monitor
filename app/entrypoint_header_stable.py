@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.10"
-entrypoint.main.app.version = "0.22.43-beta.10"
+app.version = "0.22.43-beta.11"
+entrypoint.main.app.version = "0.22.43-beta.11"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.10"',
+        '"v0.32.105-beta.11"',
         1,
     )
 
@@ -745,7 +745,7 @@ if entrypoint._index_html is not None:
 
 
     live_power_beta_patch = r"""
-<style id="disk-monitor-live-power-beta10-style">
+<style id="disk-monitor-live-power-beta11-style">
 .power-estimate-live {
     display: inline-flex;
     align-items: center;
@@ -833,7 +833,7 @@ if entrypoint._index_html is not None:
 }
 
 /*
- * Beta 10: only the Watt indicator moves. SMART label and SMART badge stay
+ * Beta 11: only the Watt indicator moves. SMART label and SMART badge stay
  * exactly where the native card layout puts them.
  */
 .disk-card
@@ -852,7 +852,7 @@ if entrypoint._index_html is not None:
     width: 5.4rem;
     min-width: 5.4rem;
     margin: 0;
-    font-size: 15px;
+    font-size: 13px;
     line-height: 1;
     white-space: nowrap;
 }
@@ -874,7 +874,7 @@ if entrypoint._index_html is not None:
  * The native USB timer / ETA hint remains unchanged below the power row.
  */
 </style>
-<script id="disk-monitor-live-power-beta10">
+<script id="disk-monitor-live-power-beta11">
 (() => {
     if (
         typeof renderStandbySince !== "function"
@@ -1349,7 +1349,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-live-power-beta10"
+        "disk-monitor-live-power-beta11"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
