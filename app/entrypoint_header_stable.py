@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.8"
-entrypoint.main.app.version = "0.22.43-beta.8"
+app.version = "0.22.43-beta.7"
+entrypoint.main.app.version = "0.22.43-beta.7"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.8"',
+        '"v0.32.105-beta.7"',
         1,
     )
 
@@ -745,7 +745,7 @@ if entrypoint._index_html is not None:
 
 
     live_power_beta_patch = r"""
-<style id="disk-monitor-live-power-beta8-style">
+<style id="disk-monitor-live-power-beta7-style">
 .power-estimate-live {
     display: inline-flex;
     align-items: center;
@@ -766,7 +766,7 @@ if entrypoint._index_html is not None:
 }
 
 /*
- * Beta 8: keep Status / seit-wartet / Watt in fixed columns.
+ * Beta 7: keep Status / seit-wartet / Watt in fixed columns.
  * The Watt slot no longer moves when the time text appears or disappears.
  */
 .disk-card:not(.compact):not(.current-access-expanded)
@@ -784,36 +784,33 @@ if entrypoint._index_html is not None:
 
 .disk-card:not(.compact):not(.current-access-expanded)
 .power-status-row {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 7px;
     width: 100%;
     min-width: 0;
+    padding-right: 7.4rem;
+    box-sizing: border-box;
     flex-wrap: nowrap;
 }
 
 .disk-card:not(.compact):not(.current-access-expanded)
 .power-status-row > .standby-since-time {
     margin-top: 0;
+    margin-left: auto;
     min-width: 0;
-    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .disk-card:not(.compact):not(.current-access-expanded)
-.disk-footer > .footer-section:last-child {
-    min-width: max-content;
-}
-
-.disk-card .smart-power-row {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 15px;
-    white-space: nowrap;
-}
-
-.disk-card .smart-power-row > .power-estimate-live {
-    display: inline-grid;
+.power-status-row > .power-estimate-live {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    display: grid;
     grid-template-columns: 1rem 5.65rem;
     align-items: center;
     column-gap: 0.25rem;
@@ -822,23 +819,25 @@ if entrypoint._index_html is not None:
     margin-left: 0;
 }
 
-.disk-card .smart-power-row > .power-estimate-live > span:first-child {
+.disk-card:not(.compact):not(.current-access-expanded)
+.power-status-row > .power-estimate-live > span:first-child {
     width: 1rem;
     text-align: left;
 }
 
-.disk-card .smart-power-row > .power-estimate-live > span:last-child {
+.disk-card:not(.compact):not(.current-access-expanded)
+.power-status-row > .power-estimate-live > span:last-child {
     width: 5.65rem;
     text-align: left;
     white-space: nowrap;
 }
 
 /*
- * Beta 8 keeps the native USB timer / ETA hint below the power row.
- * Watt is moved into the SMART footer section, 15 px left of SMART status.
+ * Beta 7 restores the native USB timer / ETA hint below the power row.
+ * renderUsbPowerHint() remains the source of the displayed text.
  */
 </style>
-<script id="disk-monitor-live-power-beta8">
+<script id="disk-monitor-live-power-beta7">
 (() => {
     if (
         typeof renderStandbySince !== "function"
@@ -1193,101 +1192,12 @@ if entrypoint._index_html is not None:
             )
         );
     };
-
-    /*
-     * Move the Watt element out of the flexible left power/status area.
-     * It lives visually and structurally beside SMART status, so changes in
-     * "seit ...", USB ETA, md0 aggregation or NVMe state cannot move it.
-     */
-    let relocatePowerFrame = null;
-
-    const relocatePowerToSmart = () => {
-        relocatePowerFrame = null;
-
-        document.querySelectorAll(
-            ".disk-card"
-        ).forEach(card => {
-            const watt = card.querySelector(
-                ".power-estimate-live"
-            );
-            const smartSection = card.querySelector(
-                ".disk-footer > .footer-section:last-child"
-            );
-
-            if (!watt || !smartSection) {
-                return;
-            }
-
-            const smartBadge = smartSection.querySelector(
-                ":scope > .status-badge, .smart-power-row > .status-badge"
-            );
-
-            if (!smartBadge) {
-                return;
-            }
-
-            let row = smartSection.querySelector(
-                ":scope > .smart-power-row"
-            );
-
-            if (!row) {
-                row = document.createElement(
-                    "div"
-                );
-                row.className =
-                    "smart-power-row";
-
-                smartBadge.parentNode.insertBefore(
-                    row,
-                    smartBadge
-                );
-                row.appendChild(
-                    smartBadge
-                );
-            }
-
-            if (
-                watt.parentElement !== row
-            ) {
-                row.insertBefore(
-                    watt,
-                    smartBadge
-                );
-            }
-        });
-    };
-
-    const schedulePowerRelocation = () => {
-        if (relocatePowerFrame !== null) {
-            return;
-        }
-
-        relocatePowerFrame =
-            window.requestAnimationFrame(
-                relocatePowerToSmart
-            );
-    };
-
-    const powerRelocationObserver =
-        new MutationObserver(
-            schedulePowerRelocation
-        );
-
-    powerRelocationObserver.observe(
-        document.body,
-        {
-            childList: true,
-            subtree: true
-        }
-    );
-
-    schedulePowerRelocation();
 })();
 </script>
 """
 
     if (
-        "disk-monitor-live-power-beta8"
+        "disk-monitor-live-power-beta7"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
@@ -1299,7 +1209,7 @@ if entrypoint._index_html is not None:
 
 
     usb_detail_beta_patch = r"""
-<style id="disk-monitor-usb-detail-beta8-style">
+<style id="disk-monitor-usb-detail-beta7-style">
 .usb-link-detail-row td {
     border-top: 1px solid rgba(67, 87, 107, .28);
 }
@@ -1316,7 +1226,7 @@ if entrypoint._index_html is not None:
     margin-top: 0;
 }
 </style>
-<script id="disk-monitor-usb-detail-beta8">
+<script id="disk-monitor-usb-detail-beta7">
 (() => {
     if (
         typeof renderDiskDetails !== "function"
@@ -1662,7 +1572,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-usb-detail-beta8"
+        "disk-monitor-usb-detail-beta7"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
