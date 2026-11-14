@@ -4,7 +4,7 @@ services:
   disk-monitor:
     container_name: disk-monitor
     hostname: disk-monitor
-    image: ghcr.io/isanto1306/disk-monitor:latest
+    image: ghcr.io/isanto1306/disk-monitor:beta
     restart: unless-stopped
     init: true
 
@@ -100,8 +100,8 @@ x-casaos:
   category: Utilities
   architectures:
     - amd64
-  version: "0.32.104"
-  update_at: "2026-10-25"
+  version: "0.32.105-beta.15"
+  update_at: "2026-11-14"
   repo: https://github.com/isanto1306/Disk-Monitor
   support: https://github.com/isanto1306/Disk-Monitor/issues
   docs: https://github.com/isanto1306/Disk-Monitor#readme
