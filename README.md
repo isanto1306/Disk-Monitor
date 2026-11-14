@@ -6,12 +6,12 @@ Disk Monitor is a self-hosted storage and SMART monitoring dashboard for ZimaOS/
 
 ## Current development versions
 
-- Backend: `0.22.43-beta.15`
-- Frontend: `0.32.105-beta.15`
+- Backend: `0.22.43`
+- Frontend: `0.32.105`
 
 ## Docker image
 
-The current image is published automatically to GitHub Container Registry:
+The current stable image is published automatically to GitHub Container Registry:
 
 ```text
 ghcr.io/isanto1306/disk-monitor:latest
