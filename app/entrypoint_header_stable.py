@@ -12,8 +12,8 @@ import email_notifications
 
 
 app = entrypoint.app
-app.version = "0.22.43-beta.8"
-entrypoint.main.app.version = "0.22.43-beta.8"
+app.version = "0.22.43-beta.9"
+entrypoint.main.app.version = "0.22.43-beta.9"
 
 email_notifications.install(app, entrypoint.main)
 
@@ -365,7 +365,7 @@ if _original_disks_route is not None:
 if entrypoint._index_html is not None:
     entrypoint._index_html = entrypoint._index_html.replace(
         '"v0.32.86"',
-        '"v0.32.105-beta.8"',
+        '"v0.32.105-beta.9"',
         1,
     )
 
@@ -745,7 +745,7 @@ if entrypoint._index_html is not None:
 
 
     live_power_beta_patch = r"""
-<style id="disk-monitor-live-power-beta8-style">
+<style id="disk-monitor-live-power-beta9-style">
 .power-estimate-live {
     display: inline-flex;
     align-items: center;
@@ -833,15 +833,15 @@ if entrypoint._index_html is not None:
 }
 
 /*
- * Beta 8: only the Watt indicator moves. SMART label and SMART badge stay
+ * Beta 9: only the Watt indicator moves. SMART label and SMART badge stay
  * exactly where the native card layout puts them.
  */
-.disk-card:not(.compact):not(.current-access-expanded)
+.disk-card
 .disk-footer > .footer-section:last-child {
     position: relative;
 }
 
-.disk-card:not(.compact):not(.current-access-expanded)
+.disk-card
 .disk-footer > .footer-section:last-child > .power-estimate-live {
     position: absolute;
     z-index: 1;
@@ -857,13 +857,13 @@ if entrypoint._index_html is not None:
     white-space: nowrap;
 }
 
-.disk-card:not(.compact):not(.current-access-expanded)
+.disk-card
 .disk-footer > .footer-section:last-child > .power-estimate-live > span:first-child {
     width: 0.8rem;
     text-align: left;
 }
 
-.disk-card:not(.compact):not(.current-access-expanded)
+.disk-card
 .disk-footer > .footer-section:last-child > .power-estimate-live > span:last-child {
     width: 4.4rem;
     text-align: left;
@@ -874,7 +874,7 @@ if entrypoint._index_html is not None:
  * The native USB timer / ETA hint remains unchanged below the power row.
  */
 </style>
-<script id="disk-monitor-live-power-beta8">
+<script id="disk-monitor-live-power-beta9">
 (() => {
     if (
         typeof renderStandbySince !== "function"
@@ -1231,8 +1231,8 @@ if entrypoint._index_html is not None:
     };
 
     /*
-     * Move only the Watt element beside the existing SMART badge.
-     * The badge itself is never wrapped, moved or restyled.
+     * Move only the Watt element beside the existing SMART badge in every
+     * card mode. The badge itself is never wrapped, moved or restyled.
      */
     let powerPlacementFrame = null;
 
@@ -1250,29 +1250,6 @@ if entrypoint._index_html is not None:
             );
 
             if (!watt || !powerRow) {
-                return;
-            }
-
-            const eligible = card.matches(
-                ".disk-card:not(.compact):not(.current-access-expanded)"
-            );
-
-            if (!eligible) {
-                if (
-                    watt.parentElement
-                    !== powerRow
-                ) {
-                    powerRow.appendChild(
-                        watt
-                    );
-                }
-
-                watt.style.removeProperty(
-                    "right"
-                );
-                watt.style.removeProperty(
-                    "top"
-                );
                 return;
             }
 
@@ -1372,7 +1349,7 @@ if entrypoint._index_html is not None:
 """
 
     if (
-        "disk-monitor-live-power-beta8"
+        "disk-monitor-live-power-beta9"
         not in entrypoint._index_html
     ):
         entrypoint._index_html = entrypoint._index_html.replace(
